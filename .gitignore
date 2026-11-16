@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# DLL: salida de compilación y archivos generados por tools/gen_headers.py
+dll/build/
+dll/src/nms_sigs.h
+dll/src/winmm_exports.h
+dll/src/winmm_stubs.S
+dll/src/winmm.def
+
+# Paquetes de versión
+*.zip
+OlympianPlanetCoords_v*/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
