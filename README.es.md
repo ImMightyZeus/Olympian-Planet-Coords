@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="160" alt="Logo de Olympian Planet Coords"></p>
+
 <h1 align="center">Olympian Planet Coords</h1>
 
 <p align="center">Coordenadas del planeta en vivo y destinos por planeta para <b>No Man's Sky</b> en Windows.<br>
