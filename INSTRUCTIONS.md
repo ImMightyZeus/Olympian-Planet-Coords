@@ -14,7 +14,6 @@ Developed by **MightyZeus**, from Nicaragua. *Español: [INSTRUCCIONES.md](INSTR
 
 > These instructions are for the **release package** of each version (folder `OlympianPlanetCoords_vX.Y.Z`, with `GAMEDATA\MODS` and `OLYMPIAN_OVERLAY`). In the repository the same files live in `mod/` and `overlay/`.
 >
-> The mod's on-screen texts are currently in Spanish only; an English interface is planned.
 
 ---
 
@@ -26,21 +25,24 @@ A No Man's Sky mod (PC, Steam, Windows):
 4. On arrival (50 m or less) the destination clears itself; the arrow turns into a sphere and shrinks.
 5. **One destination per planet**, remembered even if you leave; it only shows on that planet.
 6. **History** of the last 10 destinations (↑ ↓ arrows in the text field).
-7. **Normal / Large size** and a configurable **hotkey** (right-click the box).
+7. **Normal / Large size**, a configurable **hotkey** and **Spanish / English** language (right-click the box).
 
 ## What's new in v0.0.3
 
 - **F9 is the default hotkey** (previously F8). F8 is used by Imperial Galactic Map for "add to favourites". Change it with right-click → **Tecla** (F5 to F11, or Ninguna = none); it takes effect after **Reload Mod** in the NMS.py window.
 - **No longer stuck on "esperando al juego"** ("waiting for the game") if NMS.py is started with a save already loaded.
 - **Smooth-edged arrow**: drawn with Pillow and shown with real per-pixel transparency. Without Pillow, the previous arrow is used.
-- "Acerca de" (About) window with the repository, the AI disclosure and other projects.
+- **Spanish and English**: right-click → **Idioma / Language**. Defaults to the Windows language. The mod's messages switch instantly; the NMS.py window labels switch after **Reload Mod**.
+- The box shows the mod's name (**OLYMPIAN PLANET COORDS**) instead of "COORDENADAS", and the windows use the mod's icon.
+- About window with the logo, the GPL-3.0 license, the acknowledgements, what the mod does and doesn't do, the AI disclosure and other projects.
 
 ## Folder contents
 
 ```
 GAMEDATA\MODS\OlympianPlanetCoords.py   ← the mod (NMS.py loads it from here)
-OLYMPIAN_OVERLAY\                        ← the box and the arrow
+OLYMPIAN_OVERLAY\                        ← the box, the arrow and the icon
 INSTRUCCIONES.md / INSTRUCTIONS.md
+LICENSE                                  ← GNU GPL v3
 ```
 
 **Don't copy anything into the game folder.** NMS.py loads the mod from this folder. If the game's own `GAMEDATA\MODS` has any files (even a `__pycache__`), NMS shows the "Mod Warning" at startup: that game folder must be empty or not exist.
@@ -69,10 +71,12 @@ In PowerShell: `py -3.13 -m pymhf config nmspy`
 ## Usage
 
 - Formats: `+12.34, -56.78` · `12.34 -56.78 My base` · `12,34; -56,78; My base` (decimal comma → `;`).
-- **Esc** cancels. **Right-click**: Tamaño (size), Tecla (hotkey), Quitar destino de este planeta (clear this planet's destination), Acerca de (about), Mover (move), Salir (exit).
+- **Esc** cancels. **Right-click**: Size, Key, Idioma / Language, Clear this planet's destination, About, Move, Exit (shown in the chosen language).
 - The bearing is relative to the planet's north. The arrow is relative to the front of your ship (or your character on foot).
 
 ## Settings in the NMS.py window (saved automatically)
+
+Shown in English when English is selected (after **Reload Mod**); the Spanish names are listed here too.
 
 | Setting | What it's for |
 |---|---|
@@ -80,7 +84,8 @@ In PowerShell: `py -3.13 -m pymhf config nmspy`
 | Posicion / Pos. + offset | Position source: leave on `Entorno` / unchecked (follows the ship). |
 | Flecha inv. | Invert arrow, if it points backwards. |
 | Marcador | Marker method: leave on `BaseBuildingHUD`. |
-| Tecla (Reload Mod) | Same hotkey as the box menu. Takes effect after **Reload Mod**. |
+| Tecla / Key (Reload Mod) | Same hotkey as the box menu. Takes effect after **Reload Mod**. |
+| Idioma / Language (Reload Mod) | Language of the mod's messages; the overlay keeps it in sync. This window's labels switch after **Reload Mod**. |
 
 ## If something fails, include this when reporting it (GitHub Issues)
 

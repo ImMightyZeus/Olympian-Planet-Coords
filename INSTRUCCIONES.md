@@ -24,21 +24,24 @@ Mod para No Man's Sky (PC, Steam, Windows):
 4. Al llegar (50 m o menos) el destino se quita solo; la flecha se convierte en una esfera y se reduce.
 5. **Un destino por planeta**, recordado aunque te vayas; solo aparece en ese planeta.
 6. **Historial** de los últimos 10 destinos (flechas ↑ ↓ en el campo de texto).
-7. **Tamaño** Normal / Grande y **tecla** configurable (clic derecho en el recuadro).
+7. **Tamaño** Normal / Grande, **tecla** configurable e **idioma** español / inglés (clic derecho en el recuadro).
 
 ## Novedades de la v0.0.3
 
 - **Tecla F9 por defecto** (antes F8). F8 la usa Imperial Galactic Map para "agregar a favoritos". La tecla se cambia con clic derecho → **Tecla** (F5 a F11, o Ninguna) y se activa con **Reload Mod** en la ventana de NMS.py.
 - **Ya no se queda en "esperando al juego"** si NMS.py se inicia con la partida ya cargada.
 - **Flecha con bordes suaves**: se dibuja con Pillow y se muestra con transparencia real por píxel. Si Pillow no está instalado, se usa la flecha anterior.
-- Ventana "Acerca de" con el repositorio, la divulgación sobre el uso de IA y otros proyectos.
+- **Español e inglés**: clic derecho → **Idioma / Language**. Por defecto, el idioma de Windows. Los mensajes del mod cambian al instante; las etiquetas de la ventana de NMS.py, con **Reload Mod**.
+- El recuadro muestra el nombre del mod (**OLYMPIAN PLANET COORDS**) en lugar de "COORDENADAS", y las ventanas usan el icono del mod.
+- Ventana "Acerca de" con el logo, la licencia GPL-3.0, los agradecimientos, lo que hace y lo que no hace el mod, la divulgación sobre el uso de IA y otros proyectos.
 
 ## Contenido de la carpeta
 
 ```
 GAMEDATA\MODS\OlympianPlanetCoords.py   ← el mod (NMS.py lo carga desde aquí)
-OLYMPIAN_OVERLAY\                        ← el recuadro y la flecha
-INSTRUCCIONES.md
+OLYMPIAN_OVERLAY\                        ← el recuadro, la flecha y el icono
+INSTRUCCIONES.md / INSTRUCTIONS.md
+LICENSE                                  ← GNU GPL v3
 ```
 
 **No copies nada dentro de la carpeta del juego.** NMS.py carga el mod desde esta carpeta. Si `GAMEDATA\MODS` del juego tiene archivos (aunque sea un `__pycache__`), NMS muestra el aviso "Mod Warning" al iniciar: esa carpeta del juego debe quedar vacía o no existir.
@@ -67,7 +70,7 @@ En PowerShell: `py -3.13 -m pymhf config nmspy`
 ## Uso
 
 - Formatos: `+12.34, -56.78` · `12.34 -56.78 Mi base` · `12,34; -56,78; Mi base` (coma decimal → `;`).
-- **Esc** cancela. **Clic derecho**: Tamaño, Tecla, Quitar destino de este planeta, Acerca de, Mover, Salir.
+- **Esc** cancela. **Clic derecho**: Tamaño, Tecla, Idioma / Language, Quitar destino de este planeta, Acerca de, Mover, Salir.
 - El rumbo es respecto al norte del planeta. La flecha es respecto al frente de tu nave (o de tu personaje a pie).
 
 ## Ajustes en la ventana de NMS.py (se guardan solos)
@@ -79,6 +82,7 @@ En PowerShell: `py -3.13 -m pymhf config nmspy`
 | Flecha inv. | Si la flecha apunta al revés (hacia atrás). |
 | Marcador | Dejar en `BaseBuildingHUD`. |
 | Tecla (Reload Mod) | La misma tecla del menú del recuadro. Se activa con **Reload Mod**. |
+| Idioma (Reload Mod) | Idioma de los mensajes del mod; el overlay lo sincroniza solo. Las etiquetas de esta ventana cambian con **Reload Mod**. |
 
 ## Si algo falla, incluye esto al reportarlo (Issues de GitHub)
 

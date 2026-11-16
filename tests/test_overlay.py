@@ -7,6 +7,8 @@ import sys
 import tempfile
 import time
 
+os.environ.setdefault("OLYMPIAN_LANG", "es")  # pruebas en espanol; el ingles se prueba aparte
+
 spec = importlib.util.spec_from_file_location(
     "olympian_overlay", os.path.join(os.path.dirname(__file__), "..", "overlay", "olympian_overlay.py"))
 ov = importlib.util.module_from_spec(spec)
@@ -185,7 +187,7 @@ o.status_until = 1  # aunque pase el tiempo...
 o._tick()
 assert o.status.cget("text") == "el juego rechazo el marcador" and o.status.cget("fg") == ov.ERR
 o.start_edit()  # ...se limpia con la siguiente accion
-assert o.status.cget("text") == ov.HINT_EDIT
+assert o.status.cget("text") == ov.STRINGS["es"]["hint_edit"]
 o.cancel_edit()
 # tamano grande y persistencia
 o.set_size("grande")
@@ -234,10 +236,60 @@ assert o.message.cget("text") == "Esperando a NMS.py…"
 o.show_about()
 o.root.update()
 about = [w for w in o.root.winfo_children() if w.winfo_class() == "Toplevel"][0]
-texts = " ".join(c.cget("text") for c in about.winfo_children() if c.winfo_class() == "Label")
+
+
+def all_label_texts(w):
+    out = []
+    for c in w.winfo_children():
+        if c.winfo_class() == "Label":
+            out.append(str(c.cget("text")))
+        out.extend(all_label_texts(c))
+    return out
+
+
+texts = " ".join(all_label_texts(about))
 for needed in ("v0.0.3", "MightyZeus, originario de Nicaragua", "https://github.com/ImMightyZeus/Olympian-Planet-Coords",
-               "https://paypal.me/ImMightyZeus", "Pangro Daer Barun D'Gross", "SIL OFL 1.1",
-               "Divulgación sobre el uso de IA", "Olympian NMS Save Editor", "Otros proyectos"):
+               "https://paypal.me/ImMightyZeus", "Pangro Daer Barun D'Gross", "Fenrir", "aún se presta",
+               "Licencia GPL-3.0", "SIL OFL 1.1", "Lo que hace y lo que no hace Olympian Planet Coords",
+               "no destruirá tus saves", "Divulgación sobre el uso de IA", "sin relación con Hello Games",
+               "Olympian NMS Save Editor", "Otros proyectos", "Todos los proyectos"):
+    assert needed in texts, needed
+assert any(c.winfo_class() == "Label" and str(c.cget("image")) for c in about.winfo_children()
+           for c in [c, *c.winfo_children()]), "el logo aparece en Acerca de"
+about.destroy()
+assert o.title.cget("text") == "OLYMPIAN PLANET COORDS", "el encabezado es el nombre del mod"
+
+# ---- ingles
+pushed = []
+o.client.set_lang = lambda code: pushed.append(code) or {"saved": True}
+o.set_lang("en")
+time.sleep(0.2)
+assert pushed == ["en"], pushed
+assert o.now_row.tag.cget("text") == "NOW" and o.dest_row.tag.cget("text") == "DEST"
+assert o.status.cget("text").startswith("click to go to coordinates"), o.status.cget("text")
+labels = [o.menu.entrycget(i, "label") for i in range(o.menu.index("end") + 1) if o.menu.type(i) != "separator"]
+assert labels == ["Size", "Key", "Idioma / Language", "Clear this planet's destination", "About…",
+                  "Move to the top-left corner", "Exit"], labels
+o._on_coords(dict(base, destination=dest, in_orbit=True, lang="en"))
+assert o.dest_info.cget("text") == "1.8 km away · bearing 57° NE", o.dest_info.cget("text")
+assert o.orbit_tag.cget("text") == "ORBIT"
+o.start_edit()
+o.entry.insert(0, "95, 10")
+o.submit()
+assert "latitude out of range" in o.status.cget("text"), o.status.cget("text")
+o.cancel_edit()
+o._on_coords(dict(base, lang="es"))  # el mod habla otro idioma: el overlay le envia el suyo
+time.sleep(0.2)
+assert pushed[-1] == "en", pushed
+with open(o.settings_file, encoding="utf-8") as f:
+    assert json.load(f)["lang"] == "en"
+o.show_about()
+o.root.update()
+about = [w for w in o.root.winfo_children() if w.winfo_class() == "Toplevel"][0]
+texts = " ".join(all_label_texts(about))
+for needed in ("Developed by MightyZeus", "License GPL-3.0", "Acknowledgements:", "Fenrir, because",
+               "What Olympian Planet Coords does and doesn't do", "AI Disclosure", "not affiliated with Hello Games",
+               "Other MightyZeus projects"):
     assert needed in texts, needed
 o.root.destroy()
 print("OK overlay")

@@ -14,7 +14,7 @@ Type a latitude and longitude, get a HUD marker and a 3D arrow that guides you t
 - **Distance and bearing** to the destination, plus a smooth-edged **3D arrow** that turns and tilts towards it.
 - **Arrival:** at 50 m or less the destination clears itself and the arrow turns into a sphere.
 - **One destination per planet**, remembered even if you leave; history of the last 10.
-- **Normal / Large** size and a configurable hotkey.
+- **Normal / Large** size, a configurable hotkey, and the interface in **English or Spanish**.
 
 ## Status
 

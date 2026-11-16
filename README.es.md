@@ -14,7 +14,7 @@ Escribe una latitud y una longitud, y obtienes un marcador en el HUD y una flech
 - **Distancia y rumbo** al destino, y una **flecha 3D** con bordes suaves que gira e inclina hacia él.
 - **Llegada:** a 50 m o menos el destino se quita solo y la flecha se convierte en una esfera.
 - **Un destino por planeta**, recordado aunque te vayas; historial de los últimos 10.
-- Tamaño **Normal / Grande** y tecla configurable.
+- Tamaño **Normal / Grande**, tecla configurable e interfaz en **español o inglés**.
 
 ## Estado
 

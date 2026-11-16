@@ -4,14 +4,18 @@
 """
 Olympian Planet Coords v0.0.3  -  mod de NMS.py para No Man's Sky (PC / Windows)
 
-Desarrollado por MightyZeus, originario de Nicaragua
-Copyright (c) 2026 MightyZeus
-Apoya el proyecto: https://paypal.me/ImMightyZeus
-Repositorio:       https://github.com/ImMightyZeus/Olympian-Planet-Coords
-Otros proyectos:   https://github.com/ImMightyZeus
+Olympian Planet Coords — Copyright © 2026 MightyZeus · Licencia GPL-3.0
+Apoya el proyecto: https://paypal.me/ImMightyZeus · Repositorio: https://github.com/ImMightyZeus/Olympian-Planet-Coords
 
-Agradecimientos a mi querida esposa, a mi familia y a Pangro Daer Barun D'Gross por seguirme
-corrompiendo con videojuegos.
+Agradecimientos:
+A mi querida esposa y mi amada familia, por permitirme seguir siendo un niño aun en mi adultez.
+Pangro Daer Barun D'Gross, por seguirme corrompiendo con videojuegos.
+Fenrir, porque aunque ya casi no juega, aún se presta a conversar sobre mis aventuras y desventuras.
+
+Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo los terminos de la
+GNU General Public License version 3 (archivo LICENSE). Proyecto hecho por fans, sin relacion con
+Hello Games. Se desarrolla con la ayuda de una IA (Claude); la direccion del proyecto y las pruebas
+en el juego real son trabajo humano.
 
 Que hace
 --------
@@ -22,6 +26,8 @@ Que hace
 * Tecla para abrir el campo de texto: F9 por defecto (F8 la usa Imperial Galactic Map);
   se cambia desde el overlay (clic derecho -> Tecla) y se aplica con "Reload Mod" en NMS.py.
 * Funciona aunque NMS.py se inicie con la partida ya cargada.
+* Textos en espanol o ingles (segun Windows, o el que se elija en el overlay). Las etiquetas de la
+  ventana de NMS.py cambian de idioma con "Reload Mod".
 * Muestra distancia (km/m) y rumbo hasta el destino; al llegar (<= 50 m) lo quita solo.
 * Historial de los ultimos 10 destinos (el overlay los recorre con las flechas arriba/abajo).
 * Datos guardados en %LOCALAPPDATA%\\OlympianPlanetCoords\\datos.json (sin permisos de admin).
@@ -50,6 +56,8 @@ import queue
 import re
 import tempfile
 import time
+import locale
+import sys
 from enum import IntEnum
 from typing import Optional
 
@@ -73,8 +81,12 @@ CREDITS = {
     "github": "https://github.com/ImMightyZeus",
     "repo": "https://github.com/ImMightyZeus/Olympian-Planet-Coords",
     "paypal": "https://paypal.me/ImMightyZeus",
-    "thanks": "Agradecimientos a mi querida esposa, a mi familia y a Pangro Daer Barun D'Gross "
-    "por seguirme corrompiendo con videojuegos",
+    "license": "GPL-3.0",
+    "thanks": [
+        "A mi querida esposa y mi amada familia, por permitirme seguir siendo un niño aun en mi adultez.",
+        "Pangro Daer Barun D'Gross, por seguirme corrompiendo con videojuegos.",
+        "Fenrir, porque aunque ya casi no juega, aún se presta a conversar sobre mis aventuras y desventuras.",
+    ],
 }
 MARKER_POINT_SIZE = 0x2B0  # nms.cGcMarkerPoint._total_size_ (NMS.py 185034.0)
 MARKER_TYPE_OFFSET = 0x291  # nms.cGcMarkerPoint.meType  (c_enum8)
@@ -82,6 +94,66 @@ MARKER_TYPE_OFFSET = 0x291  # nms.cGcMarkerPoint.meType  (c_enum8)
 # Imperial Galactic Map (IGM) para "agregar a favoritos". F12 queda fuera (captura de Steam).
 HOTKEY_CHOICES = ("f5", "f6", "f7", "f8", "f9", "f10", "f11", "ninguna")
 HOTKEY_DEFAULT = "f9"
+
+# --------------------------------------------------------------------------------------------
+# Idiomas (espanol / ingles)
+# --------------------------------------------------------------------------------------------
+LANGS = ("es", "en")
+
+
+def system_lang() -> str:
+    """Idioma por defecto: OLYMPIAN_LANG si existe; si no, el idioma de Windows; si no, el locale."""
+    env = os.environ.get("OLYMPIAN_LANG", "").strip().lower()[:2]
+    if env in LANGS:
+        return env
+    try:
+        if sys.platform == "win32":
+            lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            return "es" if (lid & 0x3FF) == 0x0A else "en"
+        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
+        return "es" if loc.startswith("es") else "en"
+    except Exception:
+        return "es"
+
+
+MESSAGES = {
+    "waiting": {"es": "esperando al juego", "en": "waiting for the game"},
+    "not_on_planet": {"es": "no estas en un planeta", "en": "you're not on a planet"},
+    "arrived": {"es": "Llegaste a {name}", "en": "You reached {name}"},
+    "dest_set": {"es": "Destino: {coords}", "en": "Destination: {coords}"},
+    "dest_cleared": {"es": "Destino quitado", "en": "Destination cleared"},
+    "no_dest_here": {"es": "no hay destino en este planeta", "en": "no destination on this planet"},
+    "marker_error": {"es": "error al crear el marcador: {err}", "en": "could not create the marker: {err}"},
+    "marker_rejected": {"es": "el juego rechazo el marcador; prueba el otro metodo",
+                        "en": "the game rejected the marker; try the other method"},
+    "error": {"es": "error: {err}", "en": "error: {err}"},
+    "invalid_input": {"es": "Entrada invalida: {err}", "en": "Invalid input: {err}"},
+    "out_of_range": {"es": "coordenadas fuera de rango", "en": "coordinates out of range"},
+    "bad_hotkey": {"es": "tecla no valida", "en": "invalid key"},
+    "bad_lang": {"es": "idioma no valido", "en": "invalid language"},
+    "no_destination": {"es": "sin destino", "en": "no destination"},
+    "marker_label": {"es": "Destino", "en": "Destination"},
+    "parse_format": {"es": "formato: usa  +12.34, -56.78  (o 12,34; -56,78)",
+                     "en": "format: use  +12.34, -56.78  (or 12,34; -56,78)"},
+    "parse_lat": {"es": "latitud fuera de rango (-90..90)", "en": "latitude out of range (-90..90)"},
+    "parse_lon": {"es": "longitud fuera de rango (-180..180)", "en": "longitude out of range (-180..180)"},
+}
+
+
+def tr(key: str, lang: str, **kw) -> str:
+    entry = MESSAGES[key]
+    return entry.get(lang, entry["es"]).format(**kw)
+
+
+class CoordsError(ValueError):
+    """Error de entrada con codigo traducible (MESSAGES[code])."""
+
+    def __init__(self, code: str):
+        super().__init__(tr(code, "es"))
+        self.code = code
+
+    def text(self, lang: str) -> str:
+        return tr(self.code, lang)
 ARRIVAL_METERS = 50.0  # a esta distancia (o menos) se considera que llegaste
 ORBIT_FACTOR = 3.0  # en el espacio, "orbita" = a menos de 3 radios del centro del planeta
 HISTORY_MAX = 10
@@ -192,8 +264,12 @@ def relative_direction(origin, target, right, up, at, flip_forward=False) -> tup
 _CARDINALS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
 
 
-def cardinal(bearing: float) -> str:
-    return _CARDINALS[int(((bearing % 360) + 22.5) // 45) % 8]
+_CARDINALS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+
+def cardinal(bearing: float, lang: str = "es") -> str:
+    names = _CARDINALS_EN if lang == "en" else _CARDINALS
+    return names[int(((bearing % 360) + 22.5) // 45) % 8]
 
 
 _NUM = r"([+-]?\d+(?:\.\d+)?)"
@@ -210,14 +286,14 @@ def parse_coords(text: str) -> tuple[float, float, str]:
     t = text.strip()
     m = _COORD_SEMI_RE.match(t) if ";" in t else _COORD_DOT_RE.match(t)
     if not m:
-        raise ValueError("formato: usa  +12.34, -56.78  (o 12,34; -56,78)")
+        raise CoordsError("parse_format")
     lat = float(m.group(1).replace(",", "."))
     lon = float(m.group(2).replace(",", "."))
     name = (m.group(3) or "").strip()
     if not (-90.0 <= lat <= 90.0):
-        raise ValueError("latitud fuera de rango (-90..90)")
+        raise CoordsError("parse_lat")
     if not (-180.0 <= lon <= 180.0):
-        raise ValueError("longitud fuera de rango (-180..180)")
+        raise CoordsError("parse_lon")
     return lat, lon, name
 
 
@@ -246,7 +322,7 @@ DEFAULT_DATA = {
     "radii": {},  # planet_key -> distancia al centro medida en la superficie (radio real del planeta)
     "settings": {"convention": 0, "invert_lat": False, "planet_pos_is_local": False, "method": 1,
                  "pos_source": 0, "env_add_offset": False, "arrow_flip": False,
-                 "hotkey": HOTKEY_DEFAULT},
+                 "hotkey": HOTKEY_DEFAULT, "lang": None},
 }
 
 
@@ -297,7 +373,51 @@ def configured_hotkey(path: Optional[str] = None) -> str:
         return HOTKEY_DEFAULT
 
 
+def normalize_lang(value) -> str:
+    v = str(value or "").strip().lower()[:2]
+    return v if v in LANGS else system_lang()
+
+
+def configured_lang(path: Optional[str] = None) -> str:
+    """Idioma guardado en datos.json (o el del sistema). Las etiquetas de la ventana de NMS.py se
+    fijan al cargar el mod: un cambio de idioma se aplica ahi con "Reload Mod"."""
+    try:
+        with open(path or default_data_path(), encoding="utf-8") as f:
+            return normalize_lang((json.load(f).get("settings") or {}).get("lang"))
+    except Exception:
+        return system_lang()
+
+
 HOTKEY_INPUT = configured_hotkey()
+GUI_LANG = configured_lang()
+
+_GUI_LABELS = {
+    "coords": {"es": "Coordenadas", "en": "Coordinates"},
+    "dest": {"es": "Destino", "en": "Destination"},
+    "goto": {"es": "Ir a (lat, lon)", "en": "Go to (lat, lon)"},
+    "set_dest": {"es": "Poner destino", "en": "Set destination"},
+    "clear_dest": {"es": "Quitar destino", "en": "Clear destination"},
+    "result": {"es": "Resultado", "en": "Result"},
+    "cal_lon": {"es": "Cal. longitud", "en": "Lon. calib."},
+    "cal_lat": {"es": "Cal. inv. latitud", "en": "Invert lat."},
+    "cal_center": {"es": "Cal. centro local", "en": "Local centre"},
+    "pos": {"es": "Posicion", "en": "Position"},
+    "pos_offset": {"es": "Pos. + offset", "en": "Pos. + offset"},
+    "arrow_flip": {"es": "Flecha inv.", "en": "Invert arrow"},
+    "marker": {"es": "Marcador", "en": "Marker"},
+    "hotkey": {"es": "Tecla (Reload Mod)", "en": "Key (Reload Mod)"},
+    "lang": {"es": "Idioma (Reload Mod)", "en": "Language (Reload Mod)"},
+    "credits": {"es": "Creditos", "en": "Credits"},
+}
+
+
+def gui_label(key: str) -> str:
+    return _GUI_LABELS[key][GUI_LANG]
+
+
+class LangChoice(IntEnum):
+    Espanol = 0
+    English = 1
 
 
 class HotkeyChoice(IntEnum):
@@ -322,16 +442,18 @@ def push_history(history: list, lat: float, lon: float, name: str) -> list:
 # --------------------------------------------------------------------------------------------
 class OlympianPlanetCoords(Mod):
     __author__ = "MightyZeus (https://github.com/ImMightyZeus)"
-    __description__ = "Coordenadas planetarias en tiempo real + destino por coordenadas"
+    __description__ = "Coordenadas planetarias en tiempo real + destinos / Live planet coordinates + destinations"
     __version__ = MOD_VERSION
 
     def __init__(self, data_path: Optional[str] = None):
         super().__init__()
         self._data_path = data_path or default_data_path()
         self.data = load_data(self._data_path)
+        self.data["settings"]["lang"] = normalize_lang(self.data["settings"].get("lang"))
         self._requests: "queue.Queue[tuple[str, tuple]]" = queue.Queue()
         self._snapshot: dict = {"ok": False, "on_planet": False, "in_orbit": False,
-                                "reason": "esperando al juego", "lat": None, "lon": None}
+                                "reason": tr("waiting", normalize_lang(self.data["settings"].get("lang"))),
+                                "lat": None, "lon": None}
         self._last_result: dict = {"ok": None, "message": "", "seq": 0}
         self._active: Optional[dict] = None  # marcador colocado ahora en el juego
         self._failed_key: Optional[tuple] = None  # evita reintentar cada frame si el juego rechaza
@@ -374,6 +496,17 @@ class OlympianPlanetCoords(Mod):
         return MarkerMethod(int(self.data["settings"].get("method", 0)))
 
     @property
+    def lang(self) -> str:
+        return normalize_lang(self.data["settings"].get("lang"))
+
+    def t(self, key: str, **kw) -> str:
+        return tr(key, self.lang, **kw)
+
+    def _save_lang(self, code: str):
+        self.data["settings"]["lang"] = normalize_lang(code)
+        self._save()
+
+    @property
     def hotkey_saved(self) -> str:
         return normalize_hotkey(self.data["settings"].get("hotkey"))
 
@@ -401,7 +534,7 @@ class OlympianPlanetCoords(Mod):
         """Lee posiciones y planeta. Lanza LookupError si no hay planeta cerca."""
         player, env = gameData.player, gameData.player_environment
         if player is None or env is None:
-            raise LookupError("esperando al juego")
+            raise LookupError(self.t("waiting"))
         try:
             raw = env.meLocationStable  # pymhf c_enum32: int() directo falla, usar .value
             location = EnvironmentLocation.Enum(int(getattr(raw, "value", raw)))
@@ -438,7 +571,7 @@ class OlympianPlanetCoords(Mod):
             in_orbit = True
             radius = radii[planet_key]
         else:
-            raise LookupError("no estas en un planeta")
+            raise LookupError(self.t("not_on_planet"))
         tm = env.mPlayerTM
         basis = tuple((v.x, v.y, v.z) for v in (tm.right, tm.up, tm.at))
         return {"world": world, "offset": offset, "center": center, "rel": rel, "basis": basis,
@@ -493,7 +626,7 @@ class OlympianPlanetCoords(Mod):
             dist = surface_distance(lat, lon, dest["lat"], dest["lon"], ctx["radius"])
             brg = initial_bearing(lat, lon, dest["lat"], dest["lon"])
             dest_info = {"lat": dest["lat"], "lon": dest["lon"], "name": dest.get("name", ""),
-                         "distance_m": round(dist, 1), "bearing": round(brg), "cardinal": cardinal(brg)}
+                         "distance_m": round(dist, 1), "bearing": round(brg), "cardinal": cardinal(brg, self.lang)}
             try:
                 ux, uy, uz = latlon_to_unit(dest["lat"], dest["lon"], self.convention, self.invert_lat)
                 c, r = ctx["center"], ctx["radius"]
@@ -508,7 +641,7 @@ class OlympianPlanetCoords(Mod):
                 del self.data["destinations"][ctx["planet_key"]]
                 self._remove_active()
                 self._save()
-                self._set_result(True, f"Llegaste a {name}")
+                self._set_result(True, self.t("arrived", name=name))
                 dest_info = None
         self._snapshot = {
             "ok": True, "on_planet": not ctx["in_orbit"], "in_orbit": ctx["in_orbit"], "reason": "",
@@ -579,7 +712,7 @@ class OlympianPlanetCoords(Mod):
         if desired == self._failed_key:
             return
         _, lat, lon, name, method = desired
-        label = name or f"Destino {lat:+.2f},{lon:+.2f}"
+        label = name or f"{self.t('marker_label')} {lat:+.2f},{lon:+.2f}"
         if method == MarkerMethod.ScanMarkerList:
             sim = gameData.simulation
             if sim is None:
@@ -590,13 +723,13 @@ class OlympianPlanetCoords(Mod):
             except Exception as e:
                 logger.exception("Fallo al crear el marcador")
                 self._failed_key = desired
-                self._set_result(False, f"error al crear el marcador: {e}")
+                self._set_result(False, self.t("marker_error", err=e))
                 return
             # restype c_char -> bytes (b"\x00"/b"\x01"); None si la llamada fallo
             ok = added not in (b"", b"\x00") if isinstance(added, (bytes, bytearray)) else bool(added)
             if not ok:
                 self._failed_key = desired
-                self._set_result(False, "el juego rechazo el marcador; prueba el otro metodo")
+                self._set_result(False, self.t("marker_rejected"))
                 return
             self._active = {"key": desired, "buf": buf}
         else:
@@ -622,19 +755,20 @@ class OlympianPlanetCoords(Mod):
                     self.data["history"] = push_history(self.data["history"], lat, lon, name)
                     self._save()
                     self._remove_active()  # reemplaza el destino anterior de este planeta
-                    self._set_result(True, f"Destino: {lat:+.2f}, {lon:+.2f}" + (f" {name}" if name else ""))
+                    coords = f"{lat:+.2f}, {lon:+.2f}" + (f" {name}" if name else "")
+                    self._set_result(True, self.t("dest_set", coords=coords))
                 elif kind == "clear":
                     if self._ctx is None or self._ctx["planet_key"] not in self.data["destinations"]:
-                        raise LookupError("no hay destino en este planeta")
+                        raise LookupError(self.t("no_dest_here"))
                     del self.data["destinations"][self._ctx["planet_key"]]
                     self._remove_active()
                     self._save()
-                    self._set_result(True, "Destino quitado")
+                    self._set_result(True, self.t("dest_cleared"))
             except LookupError as e:
                 self._set_result(False, str(e))
             except Exception as e:
                 logger.exception("Fallo al procesar peticion")
-                self._set_result(False, f"error: {e}")
+                self._set_result(False, self.t("error", err=e))
 
     # ---- hooks del juego -------------------------------------------------------------------
     @nms.cGcApplication.Update.after
@@ -660,7 +794,7 @@ class OlympianPlanetCoords(Mod):
                 self._update()  # la foto refleja el destino nuevo en este mismo frame
             self._sync_marker()
         except Exception as e:  # nunca romper el frame del juego
-            self._snapshot = {"ok": False, "on_planet": False, "in_orbit": False, "reason": f"error: {e}",
+            self._snapshot = {"ok": False, "on_planet": False, "in_orbit": False, "reason": self.t("error", err=e),
                               "lat": None, "lon": None, "destination": None}
             if time.time() - self._last_error_log > 5:
                 self._last_error_log = time.time()
@@ -676,7 +810,7 @@ class OlympianPlanetCoords(Mod):
             _, lat, lon, name, _ = act["key"]
             big = self._target_matrix(lat, lon)
             label = basic.cTkFixedString0x40()
-            label.set((name or f"Destino {lat:+.2f},{lon:+.2f}")[:0x3F])
+            label.set((name or f"{self.t('marker_label')} {lat:+.2f},{lon:+.2f}")[:0x3F])
             # NMS.py declara el argumento como puntero a cTkBigPos (cTkPhysRelVec3), pero el juego lee una
             # matriz completa: se pasa la matriz con el tipo de puntero que ctypes espera.
             ptr = ctypes.cast(ctypes.pointer(big), ctypes.POINTER(basic.cTkPhysRelVec3))
@@ -703,6 +837,7 @@ class OlympianPlanetCoords(Mod):
         snap["version"] = MOD_VERSION
         snap["hotkey"] = HOTKEY_INPUT  # la que esta activa ahora
         snap["hotkey_saved"] = self.hotkey_saved  # la elegida (se activa con Reload Mod)
+        snap["lang"] = self.lang
         return snap
 
     @property
@@ -726,7 +861,7 @@ class OlympianPlanetCoords(Mod):
     @endpoint(route="marker", method="PUT")
     def http_marker(self, lat: float, lon: float, name: str = ""):
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            return {"queued": False, "message": "coordenadas fuera de rango"}
+            return {"queued": False, "message": self.t("out_of_range")}
         self._requests.put(("place", (float(lat), float(lon), name.strip()[:60])))
         try:
             from pymhf.core.utils import set_main_window_active
@@ -745,13 +880,21 @@ class OlympianPlanetCoords(Mod):
     def http_hotkey(self, key: str):
         k = str(key).strip().lower()
         if k not in HOTKEY_CHOICES:
-            return {"saved": False, "message": "tecla no valida"}
+            return {"saved": False, "message": self.t("bad_hotkey")}
         self._save_hotkey(k)
         return {"saved": True, "hotkey": HOTKEY_INPUT, "hotkey_saved": k, "pending_reload": k != HOTKEY_INPUT}
 
+    @endpoint(route="lang", method="PUT")
+    def http_lang(self, code: str):
+        c = str(code).strip().lower()
+        if c not in LANGS:
+            return {"saved": False, "message": self.t("bad_lang")}
+        self._save_lang(c)
+        return {"saved": True, "lang": c, "gui_lang": GUI_LANG}
+
     # ---- GUI de pyMHF (alternativa al overlay + calibracion) -------------------------------
     @property
-    @STRING("Coordenadas")
+    @STRING(gui_label("coords"))
     def gui_current(self):
         s = self._snapshot
         if s.get("lat") is None:
@@ -759,15 +902,15 @@ class OlympianPlanetCoords(Mod):
         return f"{s['lat']:+.2f}, {s['lon']:+.2f}" + (" (orbita)" if s.get("in_orbit") else "")
 
     @property
-    @STRING("Destino")
+    @STRING(gui_label("dest"))
     def gui_destination(self):
         d = self._snapshot.get("destination")
         if not d:
-            return "sin destino"
+            return self.t("no_destination")
         return f"{d['lat']:+.2f}, {d['lon']:+.2f}  {format_distance(d['distance_m'])} {d['cardinal']}"
 
     @property
-    @STRING("Ir a (lat, lon)")
+    @STRING(gui_label("goto"))
     def gui_input(self):
         return self._input_text
 
@@ -775,26 +918,27 @@ class OlympianPlanetCoords(Mod):
     def gui_input(self, value: str):
         self._input_text = value
 
-    @gui_button("Poner destino")
+    @gui_button(gui_label("set_dest"))
     def gui_place(self):
         try:
             lat, lon, name = parse_coords(self._input_text)
         except ValueError as e:
-            self._set_result(False, f"Entrada invalida: {e}")
+            err = e.text(self.lang) if isinstance(e, CoordsError) else e
+            self._set_result(False, self.t("invalid_input", err=err))
             return
         self._requests.put(("place", (lat, lon, name)))
 
-    @gui_button("Quitar destino")
+    @gui_button(gui_label("clear_dest"))
     def gui_clear(self):
         self._requests.put(("clear", ()))
 
     @property
-    @STRING("Resultado")
+    @STRING(gui_label("result"))
     def gui_last(self):
         return self._last_result.get("message", "")
 
     @property
-    @ENUM("Cal. longitud", LonConvention)
+    @ENUM(gui_label("cal_lon"), LonConvention)
     def gui_convention(self):
         return self.convention
 
@@ -805,7 +949,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("convention", int(LonConvention(value)))
 
     @property
-    @BOOLEAN("Cal. inv. latitud")
+    @BOOLEAN(gui_label("cal_lat"))
     def gui_invert_lat(self):
         return self.invert_lat
 
@@ -814,7 +958,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("invert_lat", bool(value))
 
     @property
-    @BOOLEAN("Cal. centro local")
+    @BOOLEAN(gui_label("cal_center"))
     def gui_planet_local(self):
         return self.planet_pos_is_local
 
@@ -823,7 +967,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("planet_pos_is_local", bool(value))
 
     @property
-    @ENUM("Posicion", PosSource)
+    @ENUM(gui_label("pos"), PosSource)
     def gui_pos_source(self):
         return self.pos_source
 
@@ -834,7 +978,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("pos_source", int(PosSource(value)))
 
     @property
-    @BOOLEAN("Pos. + offset")
+    @BOOLEAN(gui_label("pos_offset"))
     def gui_env_offset(self):
         return self.env_add_offset
 
@@ -843,7 +987,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("env_add_offset", bool(value))
 
     @property
-    @BOOLEAN("Flecha inv.")
+    @BOOLEAN(gui_label("arrow_flip"))
     def gui_arrow_flip(self):
         return self.arrow_flip
 
@@ -852,7 +996,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("arrow_flip", bool(value))
 
     @property
-    @ENUM("Marcador", MarkerMethod)
+    @ENUM(gui_label("marker"), MarkerMethod)
     def gui_method(self):
         return self.method
 
@@ -863,7 +1007,7 @@ class OlympianPlanetCoords(Mod):
         self._set_setting("method", int(MarkerMethod(value)))
 
     @property
-    @ENUM("Tecla (Reload Mod)", HotkeyChoice)
+    @ENUM(gui_label("hotkey"), HotkeyChoice)
     def gui_hotkey(self):
         return HotkeyChoice(HOTKEY_CHOICES.index(self.hotkey_saved))
 
@@ -874,7 +1018,18 @@ class OlympianPlanetCoords(Mod):
         self._save_hotkey(HOTKEY_CHOICES[int(HotkeyChoice(value))])
 
     @property
-    @STRING("Creditos")
+    @ENUM(gui_label("lang"), LangChoice)
+    def gui_lang(self):
+        return LangChoice(LANGS.index(self.lang))
+
+    @gui_lang.setter
+    def gui_lang(self, value):
+        if value is None:
+            return
+        self._save_lang(LANGS[int(LangChoice(value))])
+
+    @property
+    @STRING(gui_label("credits"))
     def gui_credits(self):
         return f"{CREDITS['author']} | {CREDITS['repo']} | {CREDITS['paypal']}"
 

@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 
+os.environ.setdefault("OLYMPIAN_LANG", "es")  # pruebas en espanol; el ingles se prueba aparte
 import winstubs  # noqa: F401  (debe ir primero)
 
 import nmspy.common as common
@@ -162,10 +163,10 @@ def test_pymhf_detecta_hooks_gui_y_endpoints():
     assert len(m._hotkey_funcs) == 1
     assert [f._hotkey for f in m._hotkey_funcs] == [mod.HOTKEY_INPUT]
     assert sorted(f._api_endpoint.route for f in m._http_endpoints["GET"]) == ["/coords", "/debug"]
-    assert sorted(f._api_endpoint.route for f in m._http_endpoints["PUT"]) == ["/clear", "/hotkey", "/marker"]
+    assert sorted(f._api_endpoint.route for f in m._http_endpoints["PUT"]) == ["/clear", "/hotkey", "/lang", "/marker"]
     labels = [getattr(getattr(w, "_widget_data", w), "label", None) for w in m._gui_widgets]
     for needed in ["Coordenadas", "Destino", "Ir a (lat, lon)", "Poner destino", "Quitar destino",
-                   "Marcador", "Flecha inv.", "Tecla (Reload Mod)", "Creditos"]:
+                   "Marcador", "Flecha inv.", "Tecla (Reload Mod)", "Idioma (Reload Mod)", "Creditos"]:
         assert needed in labels, (needed, labels)
 
 
@@ -558,6 +559,47 @@ def test_argumentos_convertibles_por_ctypes():
     assert seen == set(lookup), seen
 
 
+def test_idioma_ingles():
+    """Mensajes del mod en ingles al elegirlo (desde el overlay o la ventana de NMS.py)."""
+    assert mod.cardinal(270, "en") == "W" and mod.cardinal(315, "en") == "NW" and mod.cardinal(225) == "SO"
+    m = make_mod()
+    assert m.lang == "es" and m.http_coords["lang"] == "es"
+    from fastapi.testclient import TestClient
+    from pymhf.core.http_api import CleanableAPIRouter, create_app
+
+    app = create_app()
+    r = CleanableAPIRouter(m._mod_name, prefix=f"/{m._mod_name}")
+    r.load_routes(m._http_endpoints)
+    app.include_router(r)
+    c = TestClient(app)
+    assert c.put("/OlympianPlanetCoords/lang", params={"code": "fr"}).json()["saved"] is False
+    r = c.put("/OlympianPlanetCoords/lang", params={"code": "en"}).json()
+    assert r == {"saved": True, "lang": "en", "gui_lang": mod.GUI_LANG}, r
+    with open(m._data_path, encoding="utf-8") as f:
+        assert json.load(f)["settings"]["lang"] == "en"
+    at(10.0, 0.0)
+    tick(m)
+    m.http_marker(10.0, 10.0, "Tower")
+    tick(m)
+    s = m.http_coords
+    assert s["lang"] == "en" and s["destination"]["cardinal"] == "E", s
+    assert s["last_result"]["message"].startswith("Destination: +10.00, +10.00 Tower"), s["last_result"]
+    at(10.0, 10.0)
+    tick(m)
+    tick(m)
+    assert m.http_coords["last_result"]["message"] == "You reached Tower"
+    m.gui_input = "95, 10"
+    m.gui_place()
+    assert m.gui_last == "Invalid input: latitude out of range (-90..90)", m.gui_last
+    m.gui_lang = mod.LangChoice.Espanol
+    assert m.lang == "es"
+    try:
+        mod.parse_coords("hola")
+        raise AssertionError("debe fallar")
+    except mod.CoordsError as e:
+        assert e.code == "parse_format" and "formato" in str(e) and e.text("en").startswith("format:")
+
+
 if __name__ == "__main__":
     fails = 0
     t0 = time.time()
@@ -574,3 +616,4 @@ if __name__ == "__main__":
                 traceback.print_exc()
     print("FALLOS:", fails, f"({time.time() - t0:.1f}s)")
     sys.exit(1 if fails else 0)
+

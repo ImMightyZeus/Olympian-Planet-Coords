@@ -1,13 +1,17 @@
 """
 Olympian Planet Coords v0.0.3 - overlay de esquina superior izquierda
 
-Desarrollado por MightyZeus, originario de Nicaragua
-Copyright (c) 2026 MightyZeus
-Apoya el proyecto: https://paypal.me/ImMightyZeus
-Repositorio:       https://github.com/ImMightyZeus/Olympian-Planet-Coords
+Olympian Planet Coords — Copyright © 2026 MightyZeus · Licencia GPL-3.0
+Apoya el proyecto: https://paypal.me/ImMightyZeus · Repositorio: https://github.com/ImMightyZeus/Olympian-Planet-Coords
 
-Agradecimientos a mi querida esposa, a mi familia y a Pangro Daer Barun D'Gross por seguirme
-corrompiendo con videojuegos.
+Agradecimientos:
+A mi querida esposa y mi amada familia, por permitirme seguir siendo un niño aun en mi adultez.
+Pangro Daer Barun D'Gross, por seguirme corrompiendo con videojuegos.
+Fenrir, porque aunque ya casi no juega, aún se presta a conversar sobre mis aventuras y desventuras.
+
+Software libre bajo la GNU General Public License v3 (archivo LICENSE). Proyecto hecho por fans, sin
+relacion con Hello Games. Se desarrolla con la ayuda de una IA (Claude); la direccion del proyecto y
+las pruebas en el juego real son trabajo humano. Textos en espanol e ingles (menu "Idioma / Language").
 
 Ventana pequena, sin bordes y siempre encima del juego que:
   * muestra la latitud/longitud actual (AHORA) y, si hay destino en este planeta, el DESTINO
@@ -17,7 +21,7 @@ Ventana pequena, sin bordes y siempre encima del juego que:
   * al hacer CLIC (o pulsar la tecla elegida dentro del juego, F9 por defecto) se convierte en un
     campo de texto;
     ENTER = poner destino, ESC = cancelar, flechas ARRIBA/ABAJO = historial (10);
-  * clic derecho = menu (tamano, tecla, quitar destino, acerca de, mover, salir).
+  * clic derecho = menu (tamano, tecla, idioma, quitar destino, acerca de, mover, salir).
 
 La flecha se dibuja con Pillow a 4x y se reduce (bordes suaves), y se muestra en una ventana propia
 con transparencia real por pixel (WS_EX_LAYERED + UpdateLayeredWindow). Sin Pillow, o fuera de
@@ -53,19 +57,148 @@ CREDITS = {
     "github": "https://github.com/ImMightyZeus",
     "repo": "https://github.com/ImMightyZeus/Olympian-Planet-Coords",
     "paypal": "https://paypal.me/ImMightyZeus",
-    "thanks": "Agradecimientos a mi querida esposa, a mi familia y a Pangro Daer Barun D'Gross "
-    "por seguirme corrompiendo con videojuegos",
+    "license": "GPL-3.0",
 }
-# Estandar MightyZeus 1.1 (claude/estandar-mightyzeus.md), version corta para la ventana "Acerca de".
-AI_DISCLOSURE = (
-    "Divulgación sobre el uso de IA: Olympian Planet Coords se desarrolla con la ayuda de una IA "
-    "(Claude), que participa en la escritura y revisión del código; la dirección del proyecto, qué "
-    "funciones entran y cuáles se dejan fuera a propósito, y las pruebas en el juego real son trabajo humano."
-)
+# --- Textos (estandar MightyZeus 1.3, espanol / ingles) --------------------------------------
+LANGS = ("es", "en")
+APP_TITLE = "OLYMPIAN PLANET COORDS"
 OTHER_PROJECTS = [
     ("Olympian NMS Save Editor", "https://github.com/ImMightyZeus/Olympian-NMS-Save-Editor"),
-    ("Todos los proyectos", "https://github.com/ImMightyZeus"),
 ]
+ALL_PROJECTS_URL = "https://github.com/ImMightyZeus"
+
+STRINGS = {
+    "es": {
+        "tag_now": "AHORA", "tag_dest": "DESTINO", "orbit": "ÓRBITA",
+        "waiting_mod": "Esperando a NMS.py…", "off_planet": "Fuera de un planeta",
+        "dest_info": "a {dist} · rumbo {bearing}° {cardinal}",
+        "hint_idle": "clic para ir a coordenadas", "hint_edit": "Enter · Esc · flechas: historial",
+        "hist_empty": "historial vacío", "hist_pos": "historial {i}/{n}",
+        "sending": "Enviando {coords}…", "no_contact": "No se pudo contactar al mod: {err}",
+        "rejected": "El mod rechazó la petición", "hotkey_fail": "No se pudo guardar la tecla",
+        "hotkey_pending": "Tecla {key} guardada · se activa con Reload Mod en NMS.py",
+        "hotkey_active": "Tecla {key} activa", "none": "Ninguna",
+        "parse_format": "formato: usa  +12.34, -56.78  (o 12,34; -56,78)",
+        "parse_lat": "latitud fuera de rango (-90..90)", "parse_lon": "longitud fuera de rango (-180..180)",
+        "m_size": "Tamaño", "m_normal": "Normal", "m_large": "Grande", "m_key": "Tecla",
+        "m_none_click": "Ninguna (solo clic)", "m_clear": "Quitar destino de este planeta",
+        "m_about": "Acerca de…", "m_move": "Mover a la esquina superior izquierda", "m_exit": "Salir",
+        "a_title": "Acerca de Olympian Planet Coords", "a_dev": "Desarrollado por MightyZeus, originario de Nicaragua",
+        "a_support": "Apoya el proyecto", "a_repo": "Repositorio", "a_license": "Licencia",
+        "a_thanks": "Agradecimientos:",
+        "thanks": [
+            "A mi querida esposa y mi amada familia, por permitirme seguir siendo un niño aun en mi adultez.",
+            "Pangro Daer Barun D'Gross, por seguirme corrompiendo con videojuegos.",
+            "Fenrir, porque aunque ya casi no juega, aún se presta a conversar sobre mis aventuras y desventuras.",
+        ],
+        "a_stance_title": "Lo que hace y lo que no hace Olympian Planet Coords",
+        "a_stance_intro": ("Todo mod o editor cambia el juego, y Olympian Planet Coords no es la excepción. Lo que lo "
+                           "distingue no es una superioridad moral, sino estos compromisos de seguridad:"),
+        "a_stance": [
+            "Solo presentará resultados que el juego podría producir por sí mismo, siguiendo sus propias reglas "
+            "y límites. Nunca dejará tu partida en un estado imposible.",
+            "Solo modificará aquello que se sabe con certeza; no destruirá tus saves. No aplicará funciones "
+            "experimentales de alto riesgo: ya el riesgo lo corremos por ti, con pruebas reales continuamente "
+            "monitoreadas. De todo lo demás podremos mostrarte una lectura, pero hasta no definir un método "
+            "seguro, no ofreceremos edición.",
+            "Tratará de mantener tu experiencia del juego lo más fiel posible (sin dejar de ofrecer mejoras "
+            "opcionales). Verás que ofrece herramientas para resolver problemas reales, no atajos para "
+            "\"tenerlo todo\".",
+            "Pondrá tu seguridad primero: respaldos antes de cualquier cambio a tu partida, lo mínimo invasivo "
+            "posible y avisos claros cuando algo tenga riesgo.",
+            "Será transparente: código abierto, sin relación con Hello Games, y explicará qué hace y qué no hace "
+            "cada función.",
+        ],
+        "a_ai_title": "Divulgación sobre el uso de IA",
+        "a_ai": ("El uso de nuevas tecnologías forma parte del día a día de este y de otros proyectos de MightyZeus. "
+                 "Olympian Planet Coords se desarrolla con la ayuda de una IA (Claude), que participa en la escritura "
+                 "y revisión del código; la dirección del proyecto, qué funciones entran y cuáles se dejan fuera a "
+                 "propósito, y las pruebas en el juego real son trabajo humano."),
+        "a_disclaimer": "Proyecto hecho por fans, sin relación con Hello Games.",
+        "a_others": "Otros proyectos de MightyZeus para No Man's Sky:", "a_all": "Todos los proyectos",
+        "a_fonts": "Fuentes: DSEG7 Classic (keshikan) y Share Tech Mono (Carrois), SIL OFL 1.1",
+        "a_close": "Cerrar",
+    },
+    "en": {
+        "tag_now": "NOW", "tag_dest": "DEST", "orbit": "ORBIT",
+        "waiting_mod": "Waiting for NMS.py…", "off_planet": "Not on a planet",
+        "dest_info": "{dist} away · bearing {bearing}° {cardinal}",
+        "hint_idle": "click to go to coordinates", "hint_edit": "Enter · Esc · arrows: history",
+        "hist_empty": "history is empty", "hist_pos": "history {i}/{n}",
+        "sending": "Sending {coords}…", "no_contact": "Couldn't reach the mod: {err}",
+        "rejected": "The mod rejected the request", "hotkey_fail": "Couldn't save the key",
+        "hotkey_pending": "Key {key} saved · takes effect after Reload Mod in NMS.py",
+        "hotkey_active": "Key {key} active", "none": "None",
+        "parse_format": "format: use  +12.34, -56.78  (or 12,34; -56,78)",
+        "parse_lat": "latitude out of range (-90..90)", "parse_lon": "longitude out of range (-180..180)",
+        "m_size": "Size", "m_normal": "Normal", "m_large": "Large", "m_key": "Key",
+        "m_none_click": "None (click only)", "m_clear": "Clear this planet's destination",
+        "m_about": "About…", "m_move": "Move to the top-left corner", "m_exit": "Exit",
+        "a_title": "About Olympian Planet Coords", "a_dev": "Developed by MightyZeus, from Nicaragua",
+        "a_support": "Support the project", "a_repo": "Repository", "a_license": "License",
+        "a_thanks": "Acknowledgements:",
+        "thanks": [
+            "To my dear wife and my beloved family, for letting me keep being a kid even as an adult.",
+            "Pangro Daer Barun D'Gross, for continuing to corrupt me with video games.",
+            "Fenrir, because even though he hardly plays anymore, he's still up for talking about my "
+            "adventures and misadventures.",
+        ],
+        "a_stance_title": "What Olympian Planet Coords does and doesn't do",
+        "a_stance_intro": ("Every mod or editor changes the game, and Olympian Planet Coords is no exception. What "
+                           "sets it apart isn't moral superiority, but these safety commitments:"),
+        "a_stance": [
+            "It will only produce results the game could produce on its own, following its own rules and limits. "
+            "It will never leave your save in an impossible state.",
+            "It will only change what is known with certainty; it will not destroy your saves. It will not apply "
+            "high-risk experimental features: we already take that risk for you, with real tests that are "
+            "continuously monitored. For everything else we may show you a reading, but until a safe method is "
+            "defined, we will not offer editing.",
+            "It will try to keep your game experience as faithful as possible (while still offering optional "
+            "improvements). You'll see that it offers tools that solve real problems, not shortcuts to "
+            "\"have everything\".",
+            "It will put your safety first: backups before any change to your save, as little intrusion as "
+            "possible, and clear warnings when something carries risk.",
+            "It will be transparent: open source, not affiliated with Hello Games, and it will explain what each "
+            "feature does and doesn't do.",
+        ],
+        "a_ai_title": "AI Disclosure",
+        "a_ai": ("New technologies are part of the everyday work behind this and other MightyZeus projects. "
+                 "Olympian Planet Coords is developed with the help of an AI (Claude), which takes part in writing "
+                 "and reviewing the code; the project's direction, which features go in and which are left out on "
+                 "purpose, and the testing in the real game are human work."),
+        "a_disclaimer": "Fan-made project, not affiliated with Hello Games.",
+        "a_others": "Other MightyZeus projects for No Man's Sky:", "a_all": "All projects",
+        "a_fonts": "Fonts: DSEG7 Classic (keshikan) and Share Tech Mono (Carrois), SIL OFL 1.1",
+        "a_close": "Close",
+    },
+}
+
+
+def system_lang() -> str:
+    """OLYMPIAN_LANG si existe; si no, el idioma de Windows; si no, el locale."""
+    env = os.environ.get("OLYMPIAN_LANG", "").strip().lower()[:2]
+    if env in LANGS:
+        return env
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            return "es" if (lid & 0x3FF) == 0x0A else "en"
+        import locale
+
+        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
+        return "es" if loc.startswith("es") else "en"
+    except Exception:
+        return "es"
+
+
+class CoordsError(ValueError):
+    def __init__(self, code: str):
+        super().__init__(STRINGS["es"][code])
+        self.code = code
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_FILES = [os.path.join(HERE, "fonts", "DSEG7Classic-Bold.ttf"),
               os.path.join(HERE, "fonts", "ShareTechMono-Regular.ttf")]
@@ -83,14 +216,14 @@ def parse_coords(text: str) -> tuple[float, float, str]:
     t = text.strip()
     m = _COORD_SEMI_RE.match(t) if ";" in t else _COORD_DOT_RE.match(t)
     if not m:
-        raise ValueError("formato: usa  +12.34, -56.78  (o 12,34; -56,78)")
+        raise CoordsError("parse_format")
     lat = float(m.group(1).replace(",", "."))
     lon = float(m.group(2).replace(",", "."))
     name = (m.group(3) or "").strip()
     if not (-90.0 <= lat <= 90.0):
-        raise ValueError("latitud fuera de rango (-90..90)")
+        raise CoordsError("parse_lat")
     if not (-180.0 <= lon <= 180.0):
-        raise ValueError("longitud fuera de rango (-180..180)")
+        raise CoordsError("parse_lon")
     return lat, lon, name
 
 
@@ -213,12 +346,14 @@ def settings_path() -> str:
 
 
 def load_settings(path: str) -> dict:
-    data = {"size": "normal"}
+    data = {"size": "normal", "lang": None}
     try:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
         if raw.get("size") in ("normal", "grande"):
             data["size"] = raw["size"]
+        if raw.get("lang") in LANGS:
+            data["lang"] = raw["lang"]
     except Exception:
         pass
     return data
@@ -259,6 +394,9 @@ class ModClient:
 
     def clear_marker(self) -> dict:
         return self._put("clear", {"confirm": "true"})
+
+    def set_lang(self, code: str) -> dict:
+        return self._put("lang", {"code": code})
 
     def set_hotkey(self, key: str) -> dict:
         return self._put("hotkey", {"key": key})
@@ -421,10 +559,44 @@ ERR = "#FF6B6B"
 OK = "#7BE495"
 DEST = "#7FD4FF"
 HOTKEY_CHOICES = ("f5", "f6", "f7", "f8", "f9", "f10", "f11", "ninguna")  # igual que en el mod
-HINT_EDIT = "Enter · Esc · flechas: historial"
 FRAME_MS = 33  # ~30 fps para la flecha
 POLL_MS = 60  # consulta al mod ~16 veces por segundo
 MORPH_SECONDS = 0.5
+
+
+ICON_ICO = os.path.join(HERE, "olympian_planet_coords.ico")
+ICON_PNG = os.path.join(HERE, "olympian_planet_coords.png")
+
+
+def load_logo_photo(master, size: int):
+    """Logo del mod como PhotoImage de Tk (con Pillow si esta; si no, el PNG reducido con subsample)."""
+    try:
+        from PIL import Image, ImageTk
+
+        img = Image.open(ICON_PNG).convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(img, master=master)
+    except Exception:
+        pass
+    try:
+        photo = tk.PhotoImage(master=master, file=ICON_PNG)
+        factor = max(1, photo.width() // size)
+        return photo.subsample(factor, factor)
+    except Exception:
+        return None
+
+
+def set_window_icon(win, owner) -> None:
+    """Icono del mod en la ventana (barra de titulo / Alt+Tab). Nunca falla."""
+    try:
+        if sys.platform == "win32" and os.path.exists(ICON_ICO):
+            win.iconbitmap(default=ICON_ICO)
+            return
+        if owner._icon_photo is None:
+            owner._icon_photo = load_logo_photo(win, 64)
+        if owner._icon_photo is not None:
+            win.iconphoto(False, owner._icon_photo)
+    except Exception:
+        pass
 
 
 class CoordRow(tk.Frame):
@@ -467,6 +639,8 @@ class Overlay:
         self.poll_ms = poll_ms
         self.settings_file = settings_file or settings_path()
         self.settings = load_settings(self.settings_file)
+        self.lang = self.settings.get("lang") or system_lang()
+        self._lang_push_busy = False
         self.editing = False
         self.last_data: dict | None = None
         self.last_input_request_id: int | None = None
@@ -503,6 +677,8 @@ class Overlay:
             self.transparent_ok = False
         self.root.configure(bg=KEY)
         self.root.geometry(f"+{x}+{y}")
+        self._icon_photo = None
+        set_window_icon(self.root, self)
 
         fams = set(tkfont.families(self.root))
         num_fam = NUM_FAMILY if NUM_FAMILY in fams else "Consolas"
@@ -537,15 +713,15 @@ class Overlay:
         head = tk.Frame(self.frame, bg=BG)
         head.pack(fill="x")
         self.head = head
-        self.title = tk.Label(head, text="COORDENADAS", fg=ACCENT, bg=BG, font=self.fonts["small"], anchor="w")
+        self.title = tk.Label(head, text=APP_TITLE, fg=ACCENT, bg=BG, font=self.fonts["small"], anchor="w")
         self.title.pack(side="left")
         self.orbit_tag = tk.Label(head, text="", fg=DEST, bg=BG, font=self.fonts["small"])
         self.orbit_tag.pack(side="left", padx=(8, 0))
 
-        self.message = tk.Label(self.frame, text="Esperando a NMS.py…", fg=MUTED, bg=BG,
+        self.message = tk.Label(self.frame, text=self.tr("waiting_mod"), fg=MUTED, bg=BG,
                                 font=self.fonts["text"], anchor="w")
-        self.now_row = CoordRow(self.frame, "AHORA", FG, self.fonts)
-        self.dest_row = CoordRow(self.frame, "DESTINO", DEST, self.fonts)
+        self.now_row = CoordRow(self.frame, self.tr("tag_now"), FG, self.fonts)
+        self.dest_row = CoordRow(self.frame, self.tr("tag_dest"), DEST, self.fonts)
         self.dest_info = tk.Label(self.frame, text="", fg=DEST, bg=BG, font=self.fonts["small"], anchor="w")
         self.entry = tk.Entry(self.frame, font=self.fonts["entry"], bg="#1C242B", fg=FG,
                               insertbackground=FG, relief="flat", width=26)
@@ -568,27 +744,77 @@ class Overlay:
         self.entry.bind("<Button-3>", self.show_menu)
 
         self.size_var = tk.StringVar(self.root, value=self.settings["size"])
-        self.menu = tk.Menu(self.root, tearoff=0)
-        size_menu = tk.Menu(self.menu, tearoff=0)
-        size_menu.add_radiobutton(label="Normal", value="normal", variable=self.size_var,
-                                  command=lambda: self.set_size("normal"))
-        size_menu.add_radiobutton(label="Grande", value="grande", variable=self.size_var,
-                                  command=lambda: self.set_size("grande"))
-        self.menu.add_cascade(label="Tamaño", menu=size_menu)
         self.hotkey_var = tk.StringVar(self.root, value="")
-        key_menu = tk.Menu(self.menu, tearoff=0)
-        for key in HOTKEY_CHOICES:
-            key_menu.add_radiobutton(label=key.upper() if key != "ninguna" else "Ninguna (solo clic)",
-                                     value=key, variable=self.hotkey_var, command=lambda k=key: self.set_hotkey(k))
-        self.menu.add_cascade(label="Tecla", menu=key_menu)
-        self.menu.add_command(label="Quitar destino de este planeta", command=self.clear_marker)
-        self.menu.add_command(label="Acerca de…", command=self.show_about)
-        self.menu.add_command(label="Mover a la esquina superior izquierda", command=lambda: self.move_to(12, 12))
-        self.menu.add_separator()
-        self.menu.add_command(label="Salir", command=self.root.destroy)
+        self.lang_var = tk.StringVar(self.root, value=self.lang)
+        self.menu = None
+        self._build_menu()
 
         self.root.after(30, self._tick)
         self.root.after(FRAME_MS, self._render_loop)
+
+    # ---- idioma
+    def tr(self, _key: str, /, **kw):
+        val = STRINGS.get(self.lang, STRINGS["es"])[_key]
+        return val.format(**kw) if (kw and isinstance(val, str)) else val
+
+    def _build_menu(self):
+        if self.menu is not None:
+            self.menu.destroy()
+        self.menu = tk.Menu(self.root, tearoff=0)
+        size_menu = tk.Menu(self.menu, tearoff=0)
+        size_menu.add_radiobutton(label=self.tr("m_normal"), value="normal", variable=self.size_var,
+                                  command=lambda: self.set_size("normal"))
+        size_menu.add_radiobutton(label=self.tr("m_large"), value="grande", variable=self.size_var,
+                                  command=lambda: self.set_size("grande"))
+        self.menu.add_cascade(label=self.tr("m_size"), menu=size_menu)
+        key_menu = tk.Menu(self.menu, tearoff=0)
+        for key in HOTKEY_CHOICES:
+            key_menu.add_radiobutton(label=key.upper() if key != "ninguna" else self.tr("m_none_click"),
+                                     value=key, variable=self.hotkey_var, command=lambda k=key: self.set_hotkey(k))
+        self.menu.add_cascade(label=self.tr("m_key"), menu=key_menu)
+        lang_menu = tk.Menu(self.menu, tearoff=0)
+        lang_menu.add_radiobutton(label="Español", value="es", variable=self.lang_var,
+                                  command=lambda: self.set_lang("es"))
+        lang_menu.add_radiobutton(label="English", value="en", variable=self.lang_var,
+                                  command=lambda: self.set_lang("en"))
+        self.menu.add_cascade(label="Idioma / Language", menu=lang_menu)
+        self.menu.add_command(label=self.tr("m_clear"), command=self.clear_marker)
+        self.menu.add_command(label=self.tr("m_about"), command=self.show_about)
+        self.menu.add_command(label=self.tr("m_move"), command=lambda: self.move_to(12, 12))
+        self.menu.add_separator()
+        self.menu.add_command(label=self.tr("m_exit"), command=self.root.destroy)
+
+    def set_lang(self, code: str):
+        if code not in LANGS:
+            return
+        self.lang = code
+        self.lang_var.set(code)
+        self.settings["lang"] = code
+        save_settings(self.settings_file, self.settings)
+        self.now_row.tag.configure(text=self.tr("tag_now"))
+        self.dest_row.tag.configure(text=self.tr("tag_dest"))
+        self._build_menu()
+        if self.last_data is None:
+            self.message.configure(text=self.tr("waiting_mod"))
+        if not self.editing and not self.status_sticky:
+            self.set_status(self.hint_idle(), MUTED, 0)
+        self._push_lang()
+
+    def _push_lang(self):
+        """El idioma del overlay manda: se envia al mod para que sus mensajes coincidan."""
+        if self._lang_push_busy:
+            return
+        self._lang_push_busy = True
+
+        def work():
+            try:
+                self.client.set_lang(self.lang)
+            except Exception:
+                pass
+            finally:
+                self._lang_push_busy = False
+
+        threading.Thread(target=work, daemon=True).start()
 
     # ---- tamano
     def set_size(self, size: str):
@@ -606,15 +832,15 @@ class Overlay:
     def hint_idle(self) -> str:
         key = (self.last_data or {}).get("hotkey") if getattr(self, "last_data", None) else None
         if key and key != "ninguna":
-            return f"clic para ir a coordenadas · {key.upper()}"
-        return "clic para ir a coordenadas"
+            return f"{self.tr('hint_idle')} · {key.upper()}"
+        return self.tr("hint_idle")
 
     def set_hotkey(self, key: str):
         def work():
             try:
                 self._results.put(("hotkey", self.client.set_hotkey(key)))
             except Exception as e:
-                self._results.put(("error", f"No se pudo contactar al mod: {e}"))
+                self._results.put(("error", self.tr("no_contact", err=e)))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -719,7 +945,7 @@ class Overlay:
         self.entry.delete(0, tk.END)
         rows = self._view_rows()
         self._show(["now", "entry"] if "now" in rows else ["entry"])
-        self.set_status(HINT_EDIT, MUTED, 30)
+        self.set_status(self.tr("hint_edit"), MUTED, 30)
         self.root.lift()
         self.root.focus_force()
         self.entry.focus_set()
@@ -734,7 +960,7 @@ class Overlay:
 
     def history_step(self, delta: int):
         if not self.history:
-            self.set_status("historial vacío", MUTED, 3)
+            self.set_status(self.tr("hist_empty"), MUTED, 3)
             return "break"
         self.hist_pos = max(-1, min(len(self.history) - 1, self.hist_pos + delta))
         self.entry.delete(0, tk.END)
@@ -744,18 +970,18 @@ class Overlay:
             if h.get("name"):
                 txt += f" {h['name']}"
             self.entry.insert(0, txt)
-            self.set_status(f"historial {self.hist_pos + 1}/{len(self.history)}", MUTED, 30)
+            self.set_status(self.tr("hist_pos", i=self.hist_pos + 1, n=len(self.history)), MUTED, 30)
         return "break"
 
     def submit(self, _event=None):
         try:
             lat, lon, name = parse_coords(self.entry.get())
         except ValueError as e:
-            self.set_status(str(e), ERR, 5)
+            self.set_status(self.tr(e.code) if isinstance(e, CoordsError) else str(e), ERR, 5)
             return "break"
         self.status_sticky = False
         self.cancel_edit()
-        self.set_status(f"Enviando {lat:+.2f}, {lon:+.2f}…", ACCENT, 5)
+        self.set_status(self.tr("sending", coords=f"{lat:+.2f}, {lon:+.2f}"), ACCENT, 5)
         threading.Thread(target=self._do_place, args=(lat, lon, name), daemon=True).start()
         return "break"
 
@@ -763,14 +989,14 @@ class Overlay:
         try:
             self._results.put(("placed", self.client.place_marker(lat, lon, name)))
         except Exception as e:
-            self._results.put(("error", f"No se pudo contactar al mod: {e}"))
+            self._results.put(("error", self.tr("no_contact", err=e)))
 
     def clear_marker(self):
         def work():
             try:
                 self._results.put(("cleared", self.client.clear_marker()))
             except Exception as e:
-                self._results.put(("error", f"No se pudo contactar al mod: {e}"))
+                self._results.put(("error", self.tr("no_contact", err=e)))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -782,31 +1008,66 @@ class Overlay:
 
     def show_about(self):
         win = tk.Toplevel(self.root)
-        win.title("Acerca de Olympian Planet Coords")
+        win.title(self.tr("a_title"))
         win.configure(bg=BG, padx=16, pady=12)
         win.attributes("-topmost", True)
+        set_window_icon(win, self)
         f = (self.fonts["text"].cget("family"), 12)
         s = (self.fonts["small"].cget("family"), 9)
-        tk.Label(win, text=f"Olympian Planet Coords v{VERSION}", fg=ACCENT, bg=BG, font=f).pack(anchor="w")
-        tk.Label(win, text=f"Desarrollado por {CREDITS['author']}", fg=FG, bg=BG, font=s).pack(anchor="w")
-        tk.Label(win, text=CREDITS["copyright"], fg=FG, bg=BG, font=s).pack(anchor="w")
-        for key, label in (("paypal", "Apoya el proyecto"), ("repo", "Repositorio")):
-            link = tk.Label(win, text=f"{label}: {CREDITS[key]}", fg=DEST, bg=BG, font=s, cursor="hand2")
-            link.pack(anchor="w")
-            link.bind("<Button-1>", lambda e, u=CREDITS[key]: webbrowser.open(u))
-        tk.Label(win, text=CREDITS["thanks"], fg=MUTED, bg=BG, font=s, wraplength=360,
-                 justify="left").pack(anchor="w", pady=(8, 0))
-        tk.Label(win, text=AI_DISCLOSURE, fg=MUTED, bg=BG, font=s, wraplength=360,
-                 justify="left").pack(anchor="w", pady=(8, 0))
-        tk.Label(win, text="Otros proyectos de MightyZeus para No Man's Sky:", fg=FG, bg=BG,
-                 font=s).pack(anchor="w", pady=(8, 0))
+        b = (self.fonts["small"].cget("family"), 10)
+        wrap = 430
+
+        def text(parent, t, fg=MUTED, font=s, pady=0):
+            tk.Label(parent, text=t, fg=fg, bg=BG, font=font, wraplength=wrap, justify="left").pack(
+                anchor="w", pady=(pady, 0))
+
+        def link(parent, t, url):
+            lbl = tk.Label(parent, text=t, fg=DEST, bg=BG, font=s, cursor="hand2")
+            lbl.pack(anchor="w")
+            lbl.bind("<Button-1>", lambda e, u=url: webbrowser.open(u))
+
+        # Encabezado: logo + nombre, version, autor y licencia
+        top = tk.Frame(win, bg=BG)
+        top.pack(anchor="w", fill="x")
+        logo = load_logo_photo(win, 64)
+        if logo is not None:
+            win._logo = logo  # evita que el recolector borre la imagen
+            tk.Label(top, image=logo, bg=BG).pack(side="left", padx=(0, 10))
+        head = tk.Frame(top, bg=BG)
+        head.pack(side="left", anchor="w")
+        tk.Label(head, text=f"Olympian Planet Coords v{VERSION}", fg=ACCENT, bg=BG, font=f).pack(anchor="w")
+        tk.Label(head, text=self.tr("a_dev"), fg=FG, bg=BG, font=s).pack(anchor="w")
+        tk.Label(head, text=f"Copyright © 2026 MightyZeus · {self.tr('a_license')} {CREDITS['license']}",
+                 fg=FG, bg=BG, font=s).pack(anchor="w")
+
+        # Dos columnas para que la ventana quepa en pantallas de 1080 px con escalado
+        cols = tk.Frame(win, bg=BG)
+        cols.pack(anchor="w", fill="x", pady=(8, 0))
+        left = tk.Frame(cols, bg=BG)
+        left.pack(side="left", anchor="n", padx=(0, 18))
+        right = tk.Frame(cols, bg=BG)
+        right.pack(side="left", anchor="n")
+
+        link(left, f"{self.tr('a_support')}: {CREDITS['paypal']}", CREDITS["paypal"])
+        link(left, f"{self.tr('a_repo')}: {CREDITS['repo']}", CREDITS["repo"])
+        text(left, self.tr("a_thanks"), FG, b, 8)
+        for line in self.tr("thanks"):
+            text(left, line)
+        text(left, self.tr("a_ai_title"), FG, b, 8)
+        text(left, self.tr("a_ai"))
+        text(left, self.tr("a_disclaimer"), MUTED, s, 6)
+        text(left, self.tr("a_others"), FG, b, 8)
         for label, url in OTHER_PROJECTS:
-            link = tk.Label(win, text=f"• {label}", fg=DEST, bg=BG, font=s, cursor="hand2")
-            link.pack(anchor="w")
-            link.bind("<Button-1>", lambda e, u=url: webbrowser.open(u))
-        tk.Label(win, text="Fuentes: DSEG7 Classic (keshikan) y Share Tech Mono (Carrois), SIL OFL 1.1",
-                 fg=MUTED, bg=BG, font=s, wraplength=360, justify="left").pack(anchor="w", pady=(8, 0))
-        tk.Button(win, text="Cerrar", command=win.destroy).pack(anchor="e", pady=(10, 0))
+            link(left, f"• {label}", url)
+        link(left, f"• {self.tr('a_all')}", ALL_PROJECTS_URL)
+        text(left, self.tr("a_fonts"), MUTED, s, 8)
+
+        text(right, self.tr("a_stance_title"), FG, b)
+        text(right, self.tr("a_stance_intro"))
+        for n, line in enumerate(self.tr("a_stance"), 1):
+            text(right, f"{n}. {line}", pady=3)
+
+        tk.Button(win, text=self.tr("a_close"), command=win.destroy).pack(anchor="e", pady=(10, 0))
 
     def set_status(self, text, colour, seconds, sticky=False):
         """seconds=0 y sticky=False: texto permanente normal. sticky=True: queda hasta la siguiente accion."""
@@ -844,30 +1105,32 @@ class Overlay:
                 self._on_coords(payload)  # type: ignore[arg-type]
             elif kind == "offline":
                 self.last_data = None
-                self.message.configure(text="Esperando a NMS.py…", fg=MUTED)
+                self.message.configure(text=self.tr("waiting_mod"), fg=MUTED)
                 self.orbit_tag.configure(text="")
                 if not self.editing:
                     self._show(["message"])
             elif kind == "placed":
                 res = payload if isinstance(payload, dict) else {}
                 if not res.get("queued"):
-                    self.set_status(res.get("message", "El mod rechazó la petición"), ERR, 0, sticky=True)
+                    self.set_status(res.get("message", self.tr("rejected")), ERR, 0, sticky=True)
             elif kind == "hotkey":
                 res = payload if isinstance(payload, dict) else {}
                 if not res.get("saved"):
-                    self.set_status(res.get("message", "No se pudo guardar la tecla"), ERR, 0, sticky=True)
+                    self.set_status(res.get("message", self.tr("hotkey_fail")), ERR, 0, sticky=True)
                 else:
-                    shown = res["hotkey_saved"].upper() if res["hotkey_saved"] != "ninguna" else "Ninguna"
+                    shown = res["hotkey_saved"].upper() if res["hotkey_saved"] != "ninguna" else self.tr("none")
                     if res.get("pending_reload"):
-                        self.set_status(f"Tecla {shown} guardada · se activa con Reload Mod en NMS.py", ACCENT, 10)
+                        self.set_status(self.tr("hotkey_pending", key=shown), ACCENT, 10)
                     else:
-                        self.set_status(f"Tecla {shown} activa", OK, 5)
+                        self.set_status(self.tr("hotkey_active", key=shown), OK, 5)
             elif kind == "error":
                 self.set_status(str(payload), ERR, 0, sticky=True)
 
     def _on_coords(self, data: dict):
         self.last_data = data
         self.history = data.get("history") or []
+        if data.get("lang") in LANGS and data["lang"] != self.lang:
+            self._push_lang()  # el mod habla otro idioma: se le envia el del overlay
         if data.get("hotkey_saved") in HOTKEY_CHOICES and self.hotkey_var.get() != data["hotkey_saved"]:
             self.hotkey_var.set(data["hotkey_saved"])
         if not self.editing and not self.status_sticky and not self.status_until:
@@ -876,15 +1139,16 @@ class Overlay:
                 self.status.configure(text=hint, fg=MUTED)
         if data.get("lat") is not None:
             self.now_row.set(data["lat"], data["lon"])
-            self.orbit_tag.configure(text="ÓRBITA" if data.get("in_orbit") else "")
+            self.orbit_tag.configure(text=self.tr("orbit") if data.get("in_orbit") else "")
         else:
-            self.message.configure(text=data.get("reason") or "Fuera de un planeta", fg=MUTED)
+            self.message.configure(text=data.get("reason") or self.tr("off_planet"), fg=MUTED)
             self.orbit_tag.configure(text="")
         dest = data.get("destination")
         if dest:
             self.dest_row.set(dest["lat"], dest["lon"], dest.get("name", ""))
             self.dest_info.configure(
-                text=f"a {format_distance(dest['distance_m'])} · rumbo {dest['bearing']}° {dest['cardinal']}")
+                text=self.tr("dest_info", dist=format_distance(dest["distance_m"]), bearing=dest["bearing"],
+                             cardinal=dest["cardinal"]))
         if not self.editing:
             self._show(self._view_rows())
         # Resultado que reporta el juego (destino puesto, llegada, error real)

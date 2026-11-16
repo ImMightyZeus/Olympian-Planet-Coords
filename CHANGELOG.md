@@ -6,14 +6,18 @@
 - Tecla por defecto F9 (F8 la usa Imperial Galactic Map). Configurable: F5–F11 o ninguna, desde el menú del recuadro o la ventana de NMS.py; se activa con "Reload Mod".
 - Ya no se queda en "esperando al juego" si NMS.py se inyecta con la partida cargada.
 - Flecha con bordes suaves (Pillow a 4× y ventana con transparencia real por píxel). Sin Pillow se usa la flecha anterior.
-- Ventana "Acerca de" con repositorio, divulgación sobre el uso de IA y otros proyectos.
+- Español e inglés: menú "Idioma / Language" en el recuadro (por defecto, el idioma de Windows); mensajes del mod y ventana de NMS.py traducidos.
+- El encabezado del recuadro muestra el nombre del mod en lugar de "COORDENADAS"; icono del mod en las ventanas.
+- Ventana "Acerca de" en dos columnas con logo, licencia GPL-3.0, agradecimientos, lo que hace y lo que no hace, divulgación sobre el uso de IA y otros proyectos.
 - Instrucciones: carpeta por versión, MODS del juego vacía, orden de arranque y "start paused" en No.
 
 **English**
 - Default hotkey is now F9 (F8 is used by Imperial Galactic Map). Configurable: F5–F11 or none, from the box menu or the NMS.py window; takes effect after "Reload Mod".
 - No longer stuck on "waiting for the game" if NMS.py is injected with a save already loaded.
 - Smooth-edged arrow (Pillow at 4× and a window with real per-pixel transparency). Without Pillow the previous arrow is used.
-- About window with the repository, AI disclosure and other projects.
+- Spanish and English: "Idioma / Language" menu in the box (defaults to the Windows language); mod messages and NMS.py window translated.
+- The box header shows the mod's name instead of "COORDENADAS"; mod icon on the windows.
+- Two-column About window with logo, GPL-3.0 license, acknowledgements, what it does and doesn't do, AI disclosure and other projects.
 - Instructions: one folder per version, game's MODS folder empty, startup order and "start paused" set to No.
 
 ## v0.0.2 — 2026-11-16
