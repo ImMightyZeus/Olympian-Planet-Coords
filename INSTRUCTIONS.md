@@ -1,7 +1,7 @@
 # Olympian Planet Coords — v0.0.3
 
 ```
-Olympian Planet Coords — Copyright © 2026 MightyZeus · License to be defined (before release)
+Olympian Planet Coords — Copyright © 2026 MightyZeus · GPL-3.0 License
 Support the project: https://paypal.me/ImMightyZeus · Repository: https://github.com/ImMightyZeus/Olympian-Planet-Coords
 
 Acknowledgements:
@@ -107,6 +107,7 @@ The underlying commitment doesn't change: building real solutions and tools from
 
 ## Third-party licenses
 
+- Olympian Planet Coords: GNU GPL v3.0 (LICENSE file).
 - NMS.py / pyMHF — monkeyman192, MIT license.
 - Pillow — MIT-CMU license (installed separately with pip).
 - DSEG7 Classic (keshikan) and Share Tech Mono (Carrois Type Design) fonts — SIL Open Font License 1.1 (texts in `OLYMPIAN_OVERLAY\fonts\`).
