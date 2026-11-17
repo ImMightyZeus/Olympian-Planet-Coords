@@ -18,7 +18,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.1.0-dll.2";  // paso 2: coordenadas en vivo
+constexpr const char* kModVersion = "0.1.0-dll.3";  // paso 2: coordenadas en vivo (correccion)
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;

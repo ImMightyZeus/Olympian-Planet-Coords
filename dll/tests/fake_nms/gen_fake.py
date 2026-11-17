@@ -11,8 +11,16 @@ out = ["    .text", "    .globl FakeHelper", "FakeHelper:", "    ret", ""]
 out += ["    .globl FakeUpdate", "FakeUpdate:", "    .byte 0x40, 0x53", "    .byte 0x48, 0x83, 0xEC, 0x20",
         "    call FakeHelper", "    .byte 0x48, 0x89, 0xCB", "    .byte 0x48, 0x83, 0xC4, 0x20", "    .byte 0x5B",
         "    ret", ""]
+# cTkFSM::StateChange: 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? 4C 8B 51 ? 49 8B E8
+out += ["    .globl FakeStateChange", "FakeStateChange:",
+        "    .byte 0x48, 0x89, 0x6C, 0x24, 0x10", "    .byte 0x48, 0x89, 0x74, 0x24, 0x18", "    .byte 0x57",
+        "    .byte 0x48, 0x83, 0xEC, 0x20", "    .byte 0x4C, 0x8B, 0x51, 0x08", "    .byte 0x49, 0x8B, 0xE8",
+        "    .byte 0x48, 0x83, 0xC4, 0x20", "    .byte 0x5F", "    .byte 0x48, 0x8B, 0x6C, 0x24, 0x10",
+        "    .byte 0x48, 0x8B, 0x74, 0x24, 0x18", "    ret", ""]
 out += ["    .globl FakeSignatures", "FakeSignatures:"]
 for name in FUNCTIONS[1:]:
+    if name == "cTkFSM::StateChange":
+        continue
     bs = ["0xCC" if b.startswith("?") else "0x" + b for b in by[name]]
     out.append(f"    # {name}")
     out.append("    .byte " + ", ".join(bs))

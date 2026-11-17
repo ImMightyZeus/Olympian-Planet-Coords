@@ -5,6 +5,8 @@
 
 #include <windows.h>
 
+#include <cmath>
+
 #include "nms_offsets.h"
 
 namespace olympian {
@@ -29,6 +31,24 @@ bool RdVec3(uintptr_t addr, geo::Vec3* v) {
 }
 
 }  // namespace
+
+uintptr_t ReadPointer(uintptr_t addr) {
+    uintptr_t v = 0;
+    return Rd(addr, &v) ? v : 0;
+}
+
+bool PlausibleView(const GameView& v) {
+    if (!v.have_player_env || v.location < 0 || v.location > 15) return false;
+    auto unit = [](const geo::Vec3& a) {
+        double l = geo::Length(a);
+        return std::isfinite(l) && l > 0.9 && l < 1.1;
+    };
+    auto finite = [](const geo::Vec3& a) {
+        return std::isfinite(a.x) && std::isfinite(a.y) && std::isfinite(a.z) && std::fabs(a.x) < 1e9 &&
+               std::fabs(a.y) < 1e9 && std::fabs(a.z) < 1e9;
+    };
+    return unit(v.tm_right) && unit(v.tm_up) && unit(v.tm_at) && finite(v.tm_pos) && finite(v.nearest_planet_pos);
+}
 
 bool ReadGameView(uintptr_t app, GameView* out) {
     using namespace nmsoff;

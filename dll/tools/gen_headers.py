@@ -28,6 +28,7 @@ FUNCTIONS = [
     "cGcMarkerList::RemoveMarker",
     "cGcBaseBuildingManager::Update",
     "cGcBaseBuildingManager::AddHUDMarker",
+    "cTkFSM::StateChange",  # su "this" es cGcApplication (como hace NMS.py); Update no recibe el puntero
 ]
 
 

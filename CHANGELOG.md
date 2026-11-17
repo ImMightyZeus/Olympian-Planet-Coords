@@ -4,11 +4,11 @@
 
 **Español**
 - Paso 1: overlay como `.exe` (PyInstaller), compilado en GitHub Actions. Probado por MightyZeus.
-- Paso 2 (v0.1.0-dll.2, en prueba): `winmm.dll` junto a `NMS.exe`. Lee la posición del jugador y el planeta (solo lectura) y sirve las coordenadas al overlay en `127.0.0.1:5000`, con el mismo `datos.json` que la versión Python. Destinos guardados, distancia, rumbo, flecha y llegada a 50 m. Si la versión de NMS.exe no coincide, el DLL se desactiva solo.
+- Paso 2 (v0.1.0-dll.3, en prueba; la dll.2 no encontraba la aplicación en el juego real): `winmm.dll` junto a `NMS.exe`. Toma `cGcApplication` de `cTkFSM::StateChange`, como NMS.py. Lee la posición del jugador y el planeta (solo lectura) y sirve las coordenadas al overlay en `127.0.0.1:5000`, con el mismo `datos.json` que la versión Python. Destinos guardados, distancia, rumbo, flecha y llegada a 50 m. Si la versión de NMS.exe no coincide, el DLL se desactiva solo.
 
 **English**
 - Step 1: overlay as an `.exe` (PyInstaller), built on GitHub Actions. Tested by MightyZeus.
-- Step 2 (v0.1.0-dll.2, in testing): `winmm.dll` next to `NMS.exe`. Reads the player's position and planet (read only) and serves the coordinates to the overlay on `127.0.0.1:5000`, using the same `datos.json` as the Python version. Saved destinations, distance, bearing, arrow and arrival at 50 m. If the NMS.exe version doesn't match, the DLL disables itself.
+- Step 2 (v0.1.0-dll.3, in testing; dll.2 did not find the application in the real game): `winmm.dll` next to `NMS.exe`. Takes `cGcApplication` from `cTkFSM::StateChange`, like NMS.py. Reads the player's position and planet (read only) and serves the coordinates to the overlay on `127.0.0.1:5000`, using the same `datos.json` as the Python version. Saved destinations, distance, bearing, arrow and arrival at 50 m. If the NMS.exe version doesn't match, the DLL disables itself.
 
 ## v0.0.3 — 2026-11-16
 

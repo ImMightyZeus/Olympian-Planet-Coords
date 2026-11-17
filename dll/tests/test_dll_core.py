@@ -322,6 +322,50 @@ def test_windows_wine_fakegame(exe):
         p.wait(timeout=10)
 
 
+@test
+def test_dll_completo_bajo_wine_con_nms_falso(exe):
+    """El winmm.dll real cargado por un NMS.exe falso (version 185034, las 9 funciones en .text, un
+    cTkFSM señuelo y la aplicacion verdadera; Update recibe basura en rcx, como en el juego real)."""
+    if not (shutil.which("wine") and shutil.which("x86_64-w64-mingw32-g++")):
+        print("   (sin wine/mingw: se omite)")
+        return
+    subprocess.run(["sh", "build.sh"], cwd=DLL, check=True, stdout=subprocess.DEVNULL)
+    fake = os.path.join(DLL, "tests", "fake_nms")
+    subprocess.run([sys.executable, os.path.join(fake, "gen_fake.py")], check=True, stdout=subprocess.DEVNULL)
+    game = tempfile.mkdtemp(prefix="fakegame_")
+    res = os.path.join(BUILD, "fake_res.o")
+    subprocess.run(["x86_64-w64-mingw32-windres", os.path.join(fake, "fake_nms.rc"), "-O", "coff", "-o", res], check=True)
+    subprocess.run(["x86_64-w64-mingw32-g++", "-O1", "-std=c++17", os.path.join(fake, "fake_nms.cpp"),
+                    os.path.join(fake, "sigs.S"), res, "-o", os.path.join(game, "NMS.exe"), "-lwinmm"], check=True)
+    shutil.copy(os.path.join(DLL, "build", "winmm.dll"), game)
+    env = dict(os.environ, WINEDEBUG="-all", WINEDLLOVERRIDES="winmm=n,b")
+    p = subprocess.Popen(["wine", "NMS.exe", "12"], cwd=game, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                         text=True, env=env)
+    try:
+        assert wait_port(5000, 30), "el DLL no abrio el puerto 5000"
+        deadline = time.time() + 15
+        s = {}
+        while time.time() < deadline:
+            s = ov.ModClient("127.0.0.1", 5000).get_coords()
+            if s.get("on_planet"):
+                break
+            time.sleep(0.3)
+        assert s.get("on_planet") is True and s["planet_key"] == KEY, s
+        import urllib.request
+
+        d = json.loads(urllib.request.urlopen("http://127.0.0.1:5000/OlympianPlanetCoords/debug", timeout=2).read())
+        assert d["dll"]["functions_found"] == d["dll"]["functions_total"] == 9, d["dll"]
+        assert d["dll"]["fsm_candidates"] == 2 and d["dll"]["frames_with_game"] > 0, d["dll"]
+        out, _ = p.communicate(timeout=30)
+        assert "timeGetTime=" in out and "frames=" in out, out  # el winmm real sigue funcionando
+        log = open(os.path.join(game, "Olympian", "olympian.log"), encoding="utf-8").read()
+        assert "cGcApplication reconocido (candidato 2 de 2)" in log, log
+    finally:
+        if p.poll() is None:
+            p.terminate()
+            p.wait(timeout=10)
+
+
 if __name__ == "__main__":
     exe = build_native()
     fails = 0

@@ -41,7 +41,7 @@
 #include "routes.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.1.0-dll.2"
+#define OLYMPIAN_VERSION "0.1.0-dll.3"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -58,9 +58,19 @@ CRITICAL_SECTION g_log_lock;
 
 UINT WINAPI MissingExport() { return 0; }  // export que no existe en este Windows
 
+void Log(const char* fmt, ...);
+
 // ---- estado del mod --------------------------------------------------------------------------
 using UpdateFn = void (*)(void*);
 UpdateFn g_orig_update = nullptr;
+using StateChangeFn = void (*)(void*, void*, void*, uintptr_t);
+StateChangeFn g_orig_state_change = nullptr;
+// Objetos cTkFSM vistos en cTkFSM::StateChange. Uno de ellos es cGcApplication (como en NMS.py).
+constexpr int kMaxCandidates = 16;
+std::atomic<uintptr_t> g_candidates[kMaxCandidates];
+std::atomic<int> g_candidate_count{0};
+std::atomic<uintptr_t> g_app_valid{0};
+uintptr_t g_global_g = 0;  // puntero global que lee cGcApplication::Update (solo para diagnostico)
 std::unique_ptr<olympian::Core> g_core;
 std::unique_ptr<olympian::HttpServer> g_http;
 olympian::Json g_debug_extra = olympian::Json::object();
@@ -88,15 +98,46 @@ std::string SystemLang() {
     return (GetUserDefaultUILanguage() & 0x3FF) == 0x0A ? "es" : "en";
 }
 
+// cTkFSM::StateChange: anota el objeto (cGcApplication es un cTkFSM). No cambia nada del juego.
+void HookedStateChange(void* self, void* a, void* b, uintptr_t c) {
+    g_orig_state_change(self, a, b, c);
+    uintptr_t p = reinterpret_cast<uintptr_t>(self);
+    int n = g_candidate_count.load();
+    for (int i = 0; i < n; ++i)
+        if (g_candidates[i].load() == p) return;
+    if (n < kMaxCandidates) {
+        g_candidates[n].store(p);
+        g_candidate_count.store(n + 1);
+    }
+}
+
 // Se ejecuta en el hilo del juego, una vez por frame. Primero el juego hace lo suyo; despues se lee.
-void HookedUpdate(void* app) {
-    g_orig_update(app);
+// cGcApplication::Update NO recibe el puntero de la aplicacion en rcx (usa un global), por eso el
+// objeto se toma de cTkFSM::StateChange y se valida con lo que se lee.
+void HookedUpdate(void* arg) {
+    g_orig_update(arg);
     ++g_frames;
     if (!g_core) return;
     try {
-        g_app = reinterpret_cast<uintptr_t>(app);
         olympian::GameView view;
-        bool ok = olympian::ReadGameView(reinterpret_cast<uintptr_t>(app), &view);
+        bool ok = false;
+        uintptr_t app = g_app_valid.load();
+        if (app) {
+            ok = olympian::ReadGameView(app, &view) && view.have_player_env;
+        } else {
+            int n = g_candidate_count.load();
+            for (int i = 0; i < n && !ok; ++i) {
+                uintptr_t cand = g_candidates[i].load();
+                olympian::GameView v;
+                if (olympian::ReadGameView(cand, &v) && olympian::PlausibleView(v)) {
+                    g_app_valid.store(cand);
+                    g_app.store(cand);
+                    view = v;
+                    ok = true;
+                    Log("cGcApplication reconocido (candidato %d de %d).", i + 1, n);
+                }
+            }
+        }
         if (ok) ++g_frames_with_game;
         g_core->Tick(ok ? &view : nullptr, static_cast<double>(GetTickCount64()) / 1000.0);
     } catch (...) {
@@ -283,6 +324,17 @@ DWORD WINAPI Worker(LPVOID) {
             olympian::Json extra = g_debug_extra;
             extra["dll"]["frames"] = g_frames.load();
             extra["dll"]["frames_with_game"] = g_frames_with_game.load();
+            extra["dll"]["fsm_candidates"] = g_candidate_count.load();
+            uintptr_t app = g_app_valid.load();
+            uintptr_t gval = g_global_g ? olympian::ReadPointer(g_global_g) : 0;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "0x%llx", static_cast<unsigned long long>(app));
+            extra["dll"]["app"] = buf;
+            snprintf(buf, sizeof(buf), "0x%llx",
+                     static_cast<unsigned long long>(app ? olympian::ReadPointer(app + 0x38) : 0));
+            extra["dll"]["app_mpData"] = buf;
+            snprintf(buf, sizeof(buf), "0x%llx", static_cast<unsigned long long>(gval));
+            extra["dll"]["update_global"] = buf;
             return olympian::Route(*g_core, req, extra);
         },
         &err);
@@ -292,14 +344,29 @@ DWORD WINAPI Worker(LPVOID) {
         Log("No se pudo abrir el servidor del overlay (%s). Si NMS.py esta abierto, cierralo: usan el mismo "
             "puerto.", err.c_str());
 
-    // Engancha cGcApplication::Update (se ejecuta una vez por frame en el hilo del juego).
+    // Engancha cTkFSM::StateChange (para conocer cGcApplication) y cGcApplication::Update (una vez
+    // por frame en el hilo del juego).
     int count = 0;
     void* target = reinterpret_cast<void*>(FindPattern(ParsePattern(kNmsSigs[FN_cGcApplication_Update].pattern), &count));
+    void* sc_target =
+        reinterpret_cast<void*>(FindPattern(ParsePattern(kNmsSigs[FN_cTkFSM_StateChange].pattern), &count));
+    // Diagnostico: "mov rax, [rip+disp32]" en Update+0x77 (build 185034) lee un puntero global.
+    {
+        uint8_t* p = reinterpret_cast<uint8_t*>(target) + 0x77;
+        if (p[0] == 0x48 && p[1] == 0x8B && p[2] == 0x05) {
+            int32_t disp;
+            memcpy(&disp, p + 3, 4);
+            g_global_g = reinterpret_cast<uintptr_t>(p + 7) + disp;
+        }
+    }
     MH_STATUS mh = MH_Initialize();
     if (mh == MH_OK)
+        mh = MH_CreateHook(sc_target, reinterpret_cast<void*>(&HookedStateChange),
+                           reinterpret_cast<void**>(&g_orig_state_change));
+    if (mh == MH_OK)
         mh = MH_CreateHook(target, reinterpret_cast<void*>(&HookedUpdate), reinterpret_cast<void**>(&g_orig_update));
-    if (mh == MH_OK) mh = MH_EnableHook(target);
-    Log("Hook cGcApplication::Update: %s", MH_StatusToString(mh));
+    if (mh == MH_OK) mh = MH_EnableHook(MH_ALL_HOOKS);
+    Log("Hooks cTkFSM::StateChange + cGcApplication::Update: %s", MH_StatusToString(mh));
     Log(mh == MH_OK ? "LISTO: coordenadas en vivo activas." : "El hook fallo: el mod queda desactivado.");
     return 0;
 }

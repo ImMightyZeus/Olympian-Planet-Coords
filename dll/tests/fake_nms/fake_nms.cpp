@@ -10,9 +10,12 @@
 #include "../../src/nms_offsets.h"
 
 extern "C" void FakeUpdate(void* app);
+extern "C" void FakeStateChange(void* fsm, void* state, void* data, unsigned long long force);
 extern "C" void FakeSignatures();
 
 static unsigned char g_app[0x100];
+static unsigned char g_decoy[0x100];  // otro cTkFSM (no es la aplicacion)
+static unsigned char g_decoy_data[0x1000];
 static unsigned char* g_data;
 
 static void put3(unsigned char* p, double x, double y, double z) {
@@ -45,6 +48,14 @@ int main(int argc, char** argv) {
     put3(penv + PENV_PLAYERTM + TM_AT, 0, 0, 1);
     put3(penv + PENV_NEAREST_PLANET_POS, 100, -50, 20);
 
+    // Como el juego: varios cTkFSM cambian de estado; uno es la aplicacion. El "otro" apunta a datos
+    // vacios y no debe confundirse con la aplicacion.
+    uintptr_t dd = (uintptr_t)g_decoy_data;
+    memcpy(g_decoy + APP_MPDATA, &dd, sizeof(dd));
+    Sleep(1500);  // el DLL instala sus hooks al cargar
+    FakeStateChange(g_decoy, nullptr, nullptr, 0);
+    FakeStateChange(g_app, nullptr, nullptr, 0);
+
     // Primeros 2 s: menu (sin mpData). Despues: jugador caminando en un planeta de radio 3000.
     DWORD start = GetTickCount();
     unsigned long frames = 0;
@@ -59,7 +70,7 @@ int main(int argc, char** argv) {
             double R = 3000;
             put3(penv + PENV_PLAYERTM + TM_POS, 100 + cos(la) * sin(lo) * R, -50 + sin(la) * R, 20 + cos(la) * cos(lo) * R);
         }
-        FakeUpdate(g_app);
+        FakeUpdate((void*)0x1234);  // como el juego real: rcx NO es la aplicacion
         ++frames;
         Sleep(16);
     }
