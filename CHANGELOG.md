@@ -4,11 +4,13 @@
 
 **Español**
 - Paso 1: overlay como `.exe` (PyInstaller), compilado en GitHub Actions. Probado por MightyZeus.
-- Paso 2 (v0.1.0-dll.3, en prueba; la dll.2 no encontraba la aplicación en el juego real): `winmm.dll` junto a `NMS.exe`. Toma `cGcApplication` de `cTkFSM::StateChange`, como NMS.py. Lee la posición del jugador y el planeta (solo lectura) y sirve las coordenadas al overlay en `127.0.0.1:5000`, con el mismo `datos.json` que la versión Python. Destinos guardados, distancia, rumbo, flecha y llegada a 50 m. Si la versión de NMS.exe no coincide, el DLL se desactiva solo.
+- Paso 2 (v0.1.0-dll.3; la dll.2 no encontraba la aplicación en el juego real): `winmm.dll` junto a `NMS.exe`. Toma `cGcApplication` de `cTkFSM::StateChange`, como NMS.py. Lee la posición del jugador y el planeta (solo lectura) y sirve las coordenadas al overlay en `127.0.0.1:5000`, con el mismo `datos.json` que la versión Python. Destinos guardados, distancia, rumbo, flecha y llegada a 50 m. Si la versión de NMS.exe no coincide, el DLL se desactiva solo. Probado en el juego real por MightyZeus (17-nov-2026): coordenadas en vivo OK.
+- Paso 3 (v0.1.0-dll.4, en prueba): poner y quitar destino desde el overlay, historial de 10, marcador en el HUD del juego (`cGcBaseBuildingManager::AddHUDMarker`, el mismo método BaseBuildingHUD de la versión Python; se pide en cada frame y no queda guardado en la partida), tecla configurable (F9 por defecto, F5–F11 o ninguna) que se activa al momento, sin "Reload Mod". Después de poner un destino, el foco vuelve al juego.
 
 **English**
 - Step 1: overlay as an `.exe` (PyInstaller), built on GitHub Actions. Tested by MightyZeus.
-- Step 2 (v0.1.0-dll.3, in testing; dll.2 did not find the application in the real game): `winmm.dll` next to `NMS.exe`. Takes `cGcApplication` from `cTkFSM::StateChange`, like NMS.py. Reads the player's position and planet (read only) and serves the coordinates to the overlay on `127.0.0.1:5000`, using the same `datos.json` as the Python version. Saved destinations, distance, bearing, arrow and arrival at 50 m. If the NMS.exe version doesn't match, the DLL disables itself.
+- Step 2 (v0.1.0-dll.3; dll.2 did not find the application in the real game): `winmm.dll` next to `NMS.exe`. Takes `cGcApplication` from `cTkFSM::StateChange`, like NMS.py. Reads the player's position and planet (read only) and serves the coordinates to the overlay on `127.0.0.1:5000`, using the same `datos.json` as the Python version. Saved destinations, distance, bearing, arrow and arrival at 50 m. If the NMS.exe version doesn't match, the DLL disables itself. Tested in the real game by MightyZeus (Nov 17, 2026): live coordinates OK.
+- Step 3 (v0.1.0-dll.4, in testing): set and clear the destination from the overlay, history of 10, in-game HUD marker (`cGcBaseBuildingManager::AddHUDMarker`, the same BaseBuildingHUD method as the Python version; requested every frame and never stored in the save), configurable hotkey (F9 by default, F5–F11 or none) that takes effect immediately, no "Reload Mod". After setting a destination, focus returns to the game.
 
 ## v0.0.3 — 2026-11-16
 

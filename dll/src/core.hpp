@@ -8,6 +8,7 @@
 // juego: el DLL le entrega una "vista" del juego (GameView) en cada frame.
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <string>
 
@@ -18,11 +19,32 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.1.0-dll.3";  // paso 2: coordenadas en vivo (correccion)
+constexpr const char* kModVersion = "0.1.0-dll.4";  // paso 3: destinos, marcador en el HUD y tecla
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;
 constexpr int kHistoryMax = 10;
+constexpr int kNameMaxChars = 60;   // como la version Python (name.strip()[:60])
+constexpr int kMarkerTypeCustom = 0x35;  // cGcMarkerType::CustomMarker (nmspy 185034.0)
+
+// Teclas que se pueden elegir (igual que HOTKEY_CHOICES de Python). "ninguna" = sin tecla.
+extern const char* const kHotkeyChoices[8];
+// Codigo de tecla virtual de Windows (VK_F5..VK_F11) o 0 para "ninguna"/desconocida.
+int HotkeyVirtualKey(const std::string& name);
+
+// Marcador que el DLL dibuja en el HUD con cGcBaseBuildingManager::AddHUDMarker (como el metodo
+// BaseBuildingHUD de la version Python). Lo calcula Tick en cada frame.
+struct MarkerSpec {
+    bool valid = false;
+    float local[3] = {0, 0, 0};   // cTkPhysRelVec3.local
+    float offset[3] = {0, 0, 0};  // cTkPhysRelVec3.offset
+    char label[64] = {0};         // cTkFixedString0x40 (UTF-8, siempre termina en 0)
+};
+
+// Recorta texto UTF-8 a max_bytes sin partir un caracter.
+std::string Utf8TruncateBytes(const std::string& s, size_t max_bytes);
+// Recorta texto UTF-8 a max_chars caracteres.
+std::string Utf8TruncateChars(const std::string& s, size_t max_chars);
 
 // Lo que el DLL lee de la memoria del juego en un frame (mismos campos que usa la version Python).
 struct GameView {
@@ -58,6 +80,17 @@ class Core {
     std::string Lang();
     const std::string& DataPath() const { return data_path_; }
 
+    // Marcador del frame actual (para el hook de cGcBaseBuildingManager::Update). Seguro desde
+    // cualquier hilo y no espera a las respuestas HTTP.
+    MarkerSpec Marker();
+    // Tecla configurada (codigo virtual de Windows; 0 = ninguna).
+    int HotkeyVk() const { return hotkey_vk_.load(); }
+    // Estado de la tecla en este frame. focused = el juego tiene el foco. Cuenta una pulsacion por
+    // cada vez que la tecla pasa de suelta a presionada con el juego en primer plano.
+    void KeyState(bool down, bool focused);
+    // Datos de diagnostico del marcador (se agregan a /debug).
+    void NoteMarkerCall(bool drawn);
+
    private:
     void Load();
     void Save();
@@ -77,6 +110,16 @@ class Core {
     Json context_;
     std::string stable_key_;
     double stable_since_ = 0;
+    int input_request_id_ = 0;
+
+    std::mutex marker_mu_;
+    MarkerSpec marker_;
+    std::atomic<int> hotkey_vk_{0};
+    bool key_was_down_ = false;
+    std::atomic<unsigned long long> marker_drawn_{0};
+    std::atomic<unsigned long long> marker_skipped_{0};
+    void UpdateHotkeyLocked();
+    void SetMarkerLocked(const MarkerSpec& m);
 };
 
 }  // namespace olympian

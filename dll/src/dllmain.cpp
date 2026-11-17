@@ -1,5 +1,5 @@
-// Olympian Planet Coords (DLL) - paso 2: coordenadas en vivo para el overlay
-// Olympian Planet Coords (DLL) - step 2: live coordinates for the overlay
+// Olympian Planet Coords (DLL) - paso 3: coordenadas, destinos, marcador en el HUD y tecla
+// Olympian Planet Coords (DLL) - step 3: coordinates, destinations, HUD marker and hotkey
 //
 // Olympian Planet Coords — Copyright © 2026 MightyZeus · Licencia GPL-3.0
 // Apoya el proyecto: https://paypal.me/ImMightyZeus · Repositorio: https://github.com/ImMightyZeus/Olympian-Planet-Coords
@@ -19,11 +19,20 @@
 //   2. Busca en NMS.exe las funciones del juego (patrones de NMS.py) y lo anota en el log.
 //   3. Engancha cGcApplication::Update: en cada frame LEE (nunca escribe) la posicion del jugador
 //      y el planeta, y calcula las coordenadas igual que la version Python v0.0.3.
-//   4. Sirve esas coordenadas en http://127.0.0.1:5000/OlympianPlanetCoords/ para el overlay.
+//   4. Sirve esas coordenadas en http://127.0.0.1:5000/OlympianPlanetCoords/ para el overlay, y
+//      recibe de ahi los destinos (PUT /marker, /clear), la tecla (PUT /hotkey) y el idioma.
+//   5. Engancha cGcBaseBuildingManager::Update: si hay destino en el planeta, despues de que el
+//      juego actualiza sus marcadores, le pide al juego un marcador con
+//      cGcBaseBuildingManager::AddHUDMarker (igual que el metodo BaseBuildingHUD de la version
+//      Python, probado en el juego). El marcador dura un frame y se vuelve a pedir en el siguiente:
+//      no queda nada guardado en la partida.
+//   6. Tecla (F9 por defecto): con el juego en primer plano, abre el cuadro para escribir
+//      coordenadas en el overlay.
 
 #include <windows.h>
 
 #include <cstdarg>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -41,7 +50,7 @@
 #include "routes.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.1.0-dll.3"
+#define OLYMPIAN_VERSION "0.1.0-dll.4"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -78,6 +87,26 @@ std::atomic<unsigned long long> g_frames{0};
 std::atomic<unsigned long long> g_frames_with_game{0};
 std::atomic<uintptr_t> g_app{0};
 
+// cGcBaseBuildingManager::Update(this, float lfTimeStep) y AddHUDMarker (desensamblado en 185034:
+// rcx=this, dl=tipo, r8=matriz cTkPhysRelMat34 (lee +0x30 local y +0x40 offset), r9d=color,
+// [rsp+0x28]=nombre cTkFixedString0x40). Lee this+0x60 -> +0x1e8 (tabla de colores).
+using BbmUpdateFn = void (*)(void*, float);
+BbmUpdateFn g_orig_bbm_update = nullptr;
+using AddHudMarkerFn = void (*)(void*, int, const void*, int, const char*);
+AddHudMarkerFn g_add_hud_marker = nullptr;
+std::atomic<unsigned long long> g_bbm_frames{0};
+
+struct alignas(16) Vec3f {
+    float x, y, z, w;
+};
+struct alignas(16) PhysRelMat34 {  // cTkPhysRelMat34 (0x50 bytes)
+    Vec3f right, up, at;
+    Vec3f pos_local, pos_offset;  // cTkPhysRelVec3
+};
+static_assert(sizeof(PhysRelMat34) == 0x50, "cTkPhysRelMat34");
+static_assert(offsetof(PhysRelMat34, pos_local) == 0x30 && offsetof(PhysRelMat34, pos_offset) == 0x40,
+              "cTkPhysRelMat34.pos");
+
 std::string Utf8(const std::wstring& w) {
     if (w.empty()) return "";
     int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
@@ -92,6 +121,80 @@ std::wstring DataDir() {
     DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
     if (!n || n >= MAX_PATH) return L"";
     return std::wstring(local, n) + L"\\OlympianPlanetCoords";
+}
+
+// Despues de que el juego actualiza la construccion de bases (y sus marcadores del HUD), se pide el
+// marcador del destino. Solo si el juego tiene listo lo que AddHUDMarker usa por dentro.
+void HookedBbmUpdate(void* self, float dt) {
+    g_orig_bbm_update(self, dt);
+    ++g_bbm_frames;
+    if (!g_core || !self || !g_add_hud_marker) return;
+    try {
+        olympian::MarkerSpec m = g_core->Marker();
+        if (!m.valid) return;
+        uintptr_t inner = olympian::ReadPointer(reinterpret_cast<uintptr_t>(self) + 0x60);
+        if (!inner || !olympian::ReadPointer(inner + 0x1e8)) {
+            g_core->NoteMarkerCall(false);
+            return;
+        }
+        PhysRelMat34 mat{};
+        mat.right = {1, 0, 0, 0};
+        mat.up = {0, 1, 0, 0};
+        mat.at = {0, 0, 1, 0};
+        mat.pos_local = {m.local[0], m.local[1], m.local[2], 0};
+        mat.pos_offset = {m.offset[0], m.offset[1], m.offset[2], 0};
+        alignas(16) char label[64];
+        std::memcpy(label, m.label, sizeof(label));
+        g_add_hud_marker(self, olympian::kMarkerTypeCustom, &mat, 0, label);
+        g_core->NoteMarkerCall(true);
+    } catch (...) {
+    }
+}
+
+// true si la ventana en primer plano es del juego (la tecla solo cuenta asi, como en NMS.py).
+bool GameHasFocus() {
+    HWND fg = GetForegroundWindow();
+    if (!fg) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    return pid == GetCurrentProcessId();
+}
+
+struct FindWin {
+    HWND best = nullptr;
+    long long area = 0;
+};
+BOOL CALLBACK FindGameWindow(HWND h, LPARAM lp) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
+    RECT r;
+    if (!GetWindowRect(h, &r)) return TRUE;
+    auto* f = reinterpret_cast<FindWin*>(lp);
+    long long a = static_cast<long long>(r.right - r.left) * (r.bottom - r.top);
+    if (a > f->area) {
+        f->area = a;
+        f->best = h;
+    }
+    return TRUE;
+}
+
+// Devuelve el foco al juego despues de escribir el destino en el overlay (como
+// set_main_window_active de NMS.py).
+void FocusGame() {
+    if (GameHasFocus()) return;
+    FindWin f;
+    EnumWindows(FindGameWindow, reinterpret_cast<LPARAM>(&f));
+    if (!f.best) return;
+    if (SetForegroundWindow(f.best)) return;
+    // Windows a veces no deja cambiar el foco desde otro proceso: se une un momento a la entrada
+    // de la ventana que tiene el foco (el overlay) y se intenta de nuevo.
+    HWND fg = GetForegroundWindow();
+    DWORD fg_thread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0, me = GetCurrentThreadId();
+    if (fg_thread && fg_thread != me && AttachThreadInput(me, fg_thread, TRUE)) {
+        SetForegroundWindow(f.best);
+        AttachThreadInput(me, fg_thread, FALSE);
+    }
 }
 
 std::string SystemLang() {
@@ -140,6 +243,9 @@ void HookedUpdate(void* arg) {
         }
         if (ok) ++g_frames_with_game;
         g_core->Tick(ok ? &view : nullptr, static_cast<double>(GetTickCount64()) / 1000.0);
+        int vk = g_core->HotkeyVk();
+        bool down = vk && (GetAsyncKeyState(vk) & 0x8000) != 0;
+        g_core->KeyState(down, down && GameHasFocus());
     } catch (...) {
         // Nunca dejar que un error del mod llegue al juego.
     }
@@ -335,7 +441,12 @@ DWORD WINAPI Worker(LPVOID) {
             extra["dll"]["app_mpData"] = buf;
             snprintf(buf, sizeof(buf), "0x%llx", static_cast<unsigned long long>(gval));
             extra["dll"]["update_global"] = buf;
-            return olympian::Route(*g_core, req, extra);
+            extra["dll"]["bbm_frames"] = g_bbm_frames.load();
+            olympian::HttpResponse res = olympian::Route(*g_core, req, extra);
+            if (req.method == "PUT" && req.path.find("/marker") != std::string::npos &&
+                res.body.find("\"queued\":true") != std::string::npos)
+                FocusGame();
+            return res;
         },
         &err);
     if (http_ok)
@@ -360,6 +471,17 @@ DWORD WINAPI Worker(LPVOID) {
         }
     }
     MH_STATUS mh = MH_Initialize();
+    // Marcador del HUD: si este hook fallara, las coordenadas siguen funcionando igual.
+    void* bbm_target = reinterpret_cast<void*>(
+        FindPattern(ParsePattern(kNmsSigs[FN_cGcBaseBuildingManager_Update].pattern), &count));
+    g_add_hud_marker = reinterpret_cast<AddHudMarkerFn>(
+        FindPattern(ParsePattern(kNmsSigs[FN_cGcBaseBuildingManager_AddHUDMarker].pattern), &count));
+    if (mh == MH_OK) {
+        MH_STATUS mb = MH_CreateHook(bbm_target, reinterpret_cast<void*>(&HookedBbmUpdate),
+                                     reinterpret_cast<void**>(&g_orig_bbm_update));
+        if (mb == MH_OK) mb = MH_EnableHook(bbm_target);
+        Log("Hook cGcBaseBuildingManager::Update (marcador del HUD): %s", MH_StatusToString(mb));
+    }
     if (mh == MH_OK)
         mh = MH_CreateHook(sc_target, reinterpret_cast<void*>(&HookedStateChange),
                            reinterpret_cast<void**>(&g_orig_state_change));
@@ -367,7 +489,8 @@ DWORD WINAPI Worker(LPVOID) {
         mh = MH_CreateHook(target, reinterpret_cast<void*>(&HookedUpdate), reinterpret_cast<void**>(&g_orig_update));
     if (mh == MH_OK) mh = MH_EnableHook(MH_ALL_HOOKS);
     Log("Hooks cTkFSM::StateChange + cGcApplication::Update: %s", MH_StatusToString(mh));
-    Log(mh == MH_OK ? "LISTO: coordenadas en vivo activas." : "El hook fallo: el mod queda desactivado.");
+    Log(mh == MH_OK ? "LISTO: coordenadas, destinos, marcador y tecla activos."
+                    : "El hook fallo: el mod queda desactivado.");
     return 0;
 }
 

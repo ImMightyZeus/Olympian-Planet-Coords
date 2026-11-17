@@ -140,7 +140,8 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"].startswith("0.1.0-dll") and s["lang"] == "es" and s["hotkey"] == "ninguna", s
+    assert s["version"].startswith("0.1.0-dll") and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
         s = h.ask(frame(lat, lon, 1))
@@ -212,9 +213,6 @@ def test_idioma_y_peticiones(exe):
     assert s["lang"] == "en" and s["destination"]["cardinal"] == "E", s
     s = h.ask(frame(12.0, -45.0, 0, location=2))
     assert s["reason"] == "you're not on a planet", s
-    for route, q in (("marker", {"lat": "1", "lon": "2", "name": "x"}), ("clear", {}), ("hotkey", {"key": "f7"})):
-        r = h.ask({"put": route, "query": q})
-        assert r["queued"] is False and r["saved"] is False and "next DLL version" in r["message"], r
     s = h.ask(frame(12.0, -30.0002, 0.2))
     s = h.ask(frame(12.0, -30.0002, 1.5))
     assert s["last_result"]["message"] == "You reached +12.00, -30.00", s
@@ -256,13 +254,117 @@ def wait_port(port, timeout=10.0):
     return False
 
 
-def check_server_with_overlay_client(port, expect_text):
+@test
+def test_destinos_historial_tecla_y_marcador(exe):
+    """PUT /marker, /clear y /hotkey, el historial y el marcador del HUD, contra la version Python."""
+    base = tempfile.mkdtemp()
+    path = os.path.join(base, "datos.json")
+    h = Harness([exe, "core", path])
+    # sin juego: se acepta la peticion, pero el resultado dice por que no se puso
+    r = h.ask({"put": "marker", "query": {"lat": "10", "lon": "20", "name": "x"}})
+    assert r == {"queued": True}, r
+    s = h.ask({"none": True, "t": 0})
+    assert s["last_result"]["ok"] is False and s["last_result"]["message"] == "esperando al juego", s
+    # fuera de rango / no es numero (Python: out_of_range)
+    for q in ({"lat": "91", "lon": "0"}, {"lat": "0", "lon": "-180.5"}, {"lat": "abc", "lon": "1"}, {"lon": "1"}):
+        r = h.ask({"put": "marker", "query": q})
+        assert r == {"queued": False, "message": py.tr("out_of_range", "es")}, (q, r)
+    s = h.ask(frame(12.0, -45.0, 0.0))
+    assert h.ask({"marker": True})["valid"] is False
+    # poner destino: mismo mensaje, mismo datos.json y mismo historial que Python
+    name = "  Torre Ñandú del valle con un nombre largo largo largo largo largo largo  "
+    r = h.ask({"put": "marker", "query": {"lat": "15.006", "lon": "-40,004", "name": name}})
+    assert r == {"queued": True}, r
+    pname = name.strip()[:60]
+    s = h.ask(frame(12.0, -45.0, 0.5))
+    exp_msg = py.tr("dest_set", "es", coords=f"{15.006:+.2f}, {-40.004:+.2f}" + f" {pname}")
+    assert s["last_result"] == {"ok": True, "message": exp_msg, "seq": 2}, s["last_result"]
+    d = s["destination"]
+    assert d["lat"] == round(15.006, 2) and d["lon"] == round(-40.004, 2) and d["name"] == pname, d
+    exp_hist = py.push_history([], 15.006, -40.004, pname)
+    assert s["history"] == exp_hist, (s["history"], exp_hist)
+    saved = py.load_data(path)
+    assert saved["destinations"][KEY] == {"lat": 15.01, "lon": -40.0, "name": pname}, saved["destinations"]
+    # el marcador aparece 1 s despues de llegar al planeta (como _sync_marker con ctx["stable"])
+    assert h.ask({"marker": True})["valid"] is False
+    h.ask(frame(12.0, -45.0, 1.2))
+    m = h.ask({"marker": True})
+    u = py.latlon_to_unit(15.01, -40.0, 0, False)
+    exp = [c + k * R for c, k in zip(CENTER, u)]  # radio = distancia al centro medida (3000)
+    assert m["valid"] is True and all(abs(a - b) < 0.01 for a, b in zip(m["local"], exp)), (m, exp)
+    assert m["offset"] == [0.0, 0.0, 0.0], m
+    assert m["label"] == pname.encode("utf-8")[:63].decode("utf-8", "ignore"), m["label"]
+    assert len(m["label"].encode("utf-8")) <= 63
+    # sin nombre: "Destino +lat,+lon" (como Python)
+    h.ask({"put": "marker", "query": {"lat": "-3.5", "lon": "7"}})
+    h.ask(frame(12.0, -45.0, 1.3))
+    assert h.ask({"marker": True})["label"] == "Destino -3.50,+7.00"
+    # historial: el repetido sube al principio, maximo 10
+    hist = s["history"]
+    for i, (la, lo) in enumerate([(1, 1), (2, 2), (15.01, -40.0), *[(k, k) for k in range(3, 12)]]):
+        h.ask({"put": "marker", "query": {"lat": str(la), "lon": str(lo), "name": f"n{i}"}})
+        hist = py.push_history(hist if i else py.push_history(exp_hist, -3.5, 7, ""), la, lo, f"n{i}")
+    s = h.ask(frame(12.0, -45.0, 1.4))
+    assert s["history"] == hist and len(hist) == 10, (s["history"], hist)
+    # quitar
+    assert h.ask({"put": "clear", "query": {}}) == {"queued": True}
+    s = h.ask(frame(12.0, -45.0, 1.5))
+    assert s["destination"] is None and s["last_result"]["message"] == py.tr("dest_cleared", "es"), s
+    assert h.ask({"marker": True})["valid"] is False
+    h.ask({"put": "clear", "query": {}})
+    s = h.ask(frame(12.0, -45.0, 1.6))
+    assert s["last_result"] == {"ok": False, "message": py.tr("no_dest_here", "es"), "seq": s["last_result"]["seq"]}
+    # al cambiar de planeta el marcador espera 1 s otra vez
+    h.ask({"put": "marker", "query": {"lat": "1", "lon": "1"}})
+    h.ask(frame(12.0, -45.0, 3.0))
+    assert h.ask({"marker": True})["valid"] is True
+    h.ask(frame(12.0, -45.0, 3.1, planet_index=2))
+    assert h.ask({"marker": True})["valid"] is False  # otro planeta, sin destino
+    h.ask(frame(12.0, -45.0, 3.2))  # de vuelta al planeta 1: recien llegado
+    assert h.ask({"marker": True})["valid"] is False
+    h.ask(frame(12.0, -45.0, 4.3))
+    assert h.ask({"marker": True})["valid"] is True
+    h.ask({"none": True, "t": 4.4})  # pantalla de carga / menu: sin marcador
+    assert h.ask({"marker": True})["valid"] is False
+    # tecla: F9 por defecto (VK 0x78); se cambia al momento (sin Reload Mod)
+    assert h.ask({"marker": True})["vk"] == 0x78
+    assert h.ask({"put": "hotkey", "query": {"key": "F12"}}) == {"saved": False, "message": py.tr("bad_hotkey", "es")}
+    r = h.ask({"put": "hotkey", "query": {"key": " F7 "}})
+    assert r == {"saved": True, "hotkey": "f7", "hotkey_saved": "f7", "pending_reload": False}, r
+    assert h.ask({"marker": True})["vk"] == 0x76
+    assert py.configured_hotkey(path) == "f7"  # la version Python lee la misma tecla
+    # pulsaciones: cuenta al bajar la tecla, con el juego en primer plano; mantenerla no repite
+    s = h.ask({"key": True, "focused": True})
+    assert s["input_request_id"] == 1 and s["hotkey"] == "f7" and s["hotkey_saved"] == "f7", s
+    assert h.ask({"key": True, "focused": True})["input_request_id"] == 1
+    assert h.ask({"key": False})["input_request_id"] == 1
+    assert h.ask({"key": True, "focused": False})["input_request_id"] == 1  # otra ventana tenia el foco
+    h.ask({"key": False})
+    assert h.ask({"key": True, "focused": True})["input_request_id"] == 2
+    r = h.ask({"put": "hotkey", "query": {"key": "ninguna"}})
+    assert r["saved"] is True and h.ask({"marker": True})["vk"] == 0
+    h.close()
+    # al reiniciar, todo sigue ahi (y en ingles los textos cambian)
+    h = Harness([exe, "core", path])
+    h.ask({"put": "lang", "query": {"code": "en"}})
+    s = h.ask(frame(12.0, -45.0, 0))
+    assert s["hotkey"] == "ninguna" and s["destination"]["lat"] == 1.0 and len(s["history"]) == 10, s
+    h.ask(frame(12.0, -45.0, 1.1))
+    h.ask({"put": "marker", "query": {"lat": "2", "lon": "3"}})
+    h.ask(frame(12.0, -45.0, 1.2))
+    assert h.ask({"marker": True})["label"] == "Destination +2.00,+3.00"
+    h.close()
+
+
+def check_server_with_overlay_client(port):
     client = ov.ModClient("127.0.0.1", port)
     s = client.get_coords()
     assert s["on_planet"] is True and s["planet_key"] == KEY and isinstance(s["lat"], float), s
     assert client.set_lang("en") == {"saved": True, "lang": "en", "gui_lang": "en"}
     r = client.place_marker(10.0, 20.0, "Tower ñ")
-    assert r["queued"] is False and expect_text in r["message"], r
+    assert r == {"queued": True}, r
+    r = client.set_hotkey("f6")
+    assert r == {"saved": True, "hotkey": "f6", "hotkey_saved": "f6", "pending_reload": False}, r
     import urllib.error
     import urllib.request
 
@@ -274,7 +376,9 @@ def check_server_with_overlay_client(port, expect_text):
     d = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/OlympianPlanetCoords/debug", timeout=1).read())
     assert d["credits"]["license"] == "GPL-3.0" and d["context"]["planet_key"] == KEY, d.keys()
     s2 = client.get_coords()
-    assert s2["lang"] == "en"
+    assert s2["lang"] == "en" and s2["hotkey"] == "f6", s2
+    assert s2["last_result"]["message"] == "Destination: +10.00, +20.00 Tower ñ", s2["last_result"]
+    assert s2["history"][0] == {"lat": 10.0, "lon": 20.0, "name": "Tower ñ"}, s2["history"]
     return s2
 
 
@@ -286,7 +390,7 @@ def test_servidor_http_con_el_cliente_del_overlay(exe):
     try:
         assert wait_port(port), "el servidor no abrio"
         time.sleep(0.2)
-        check_server_with_overlay_client(port, "next DLL version")
+        check_server_with_overlay_client(port)
         # muchas peticiones seguidas, como el overlay (cada 60 ms)
         client = ov.ModClient("127.0.0.1", port)
         for _ in range(200):
@@ -315,7 +419,7 @@ def test_windows_wine_fakegame(exe):
         assert first == "empty_app_read=0", first  # sin mpData: no lee nada (esperando al juego)
         assert wait_port(port, 30), "el servidor (wine) no abrio"
         time.sleep(0.5)
-        s = check_server_with_overlay_client(port, "next DLL version")
+        s = check_server_with_overlay_client(port)
         assert -14.5 < s["lat"] < 14.5 and -46 < s["lon"] < 0, s  # el jugador falso camina desde (12, -45)
     finally:
         p.terminate()
@@ -356,10 +460,28 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         d = json.loads(urllib.request.urlopen("http://127.0.0.1:5000/OlympianPlanetCoords/debug", timeout=2).read())
         assert d["dll"]["functions_found"] == d["dll"]["functions_total"] == 9, d["dll"]
         assert d["dll"]["fsm_candidates"] == 2 and d["dll"]["frames_with_game"] > 0, d["dll"]
+        # destino lejos del jugador simulado (no llega antes de terminar)
+        client = ov.ModClient("127.0.0.1", 5000)
+        assert client.place_marker(-20.0, 100.0, "Torre Ñ") == {"queued": True}
+        time.sleep(2.5)
+        d = json.loads(urllib.request.urlopen("http://127.0.0.1:5000/OlympianPlanetCoords/debug", timeout=2).read())
+        assert d["active_marker"] is True and d["marker_frames_drawn"] > 0, d
+        assert d["marker_frames_skipped"] > 0 and d["dll"]["bbm_frames"] > 0, d  # el BBM sin datos se salta
         out, _ = p.communicate(timeout=30)
         assert "timeGetTime=" in out and "frames=" in out, out  # el winmm real sigue funcionando
         log = open(os.path.join(game, "Olympian", "olympian.log"), encoding="utf-8").read()
         assert "cGcApplication reconocido (candidato 2 de 2)" in log, log
+        assert "Hook cGcBaseBuildingManager::Update (marcador del HUD): MH_OK" in log, log
+        res = dict(kv.split("=", 1) for line in out.splitlines() for kv in line.split(" ") if "=" in kv)
+        assert int(res["hud_calls"]) > 0 and res["hud_bad_this"] == "0", out
+        assert int(res["bbm_body"]) >= 2 * int(res["hud_calls"]), out  # el juego sigue haciendo lo suyo
+        assert res["type"] == "0x35" and res["colour"] == "0" and res["hud_right"] == "1.0,0.0,0.0", out
+        assert out.split("hud_name=", 1)[1].splitlines()[0] == "Torre Ñ", out
+        u = py.latlon_to_unit(-20.0, 100.0, 0, False)
+        exp = [c + k * R for c, k in zip(CENTER, u)]
+        got = [float(x) for x in res["hud_local"].split(",")]
+        assert all(abs(a - b) < 0.05 for a, b in zip(got, exp)), (got, exp)
+        assert res["hud_offset"] == "0.000,0.000,0.000", out
     finally:
         if p.poll() is None:
             p.terminate()

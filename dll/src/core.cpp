@@ -3,7 +3,9 @@
 
 #include "core.hpp"
 
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -24,8 +26,12 @@ const std::map<std::string, std::pair<const char*, const char*>> kMessages = {
     {"not_on_planet", {"no estas en un planeta", "you're not on a planet"}},
     {"arrived", {"Llegaste a {name}", "You reached {name}"}},
     {"bad_lang", {"idioma no valido", "invalid language"}},
-    {"dll_not_yet",
-     {"esta funcion llega en la siguiente version del DLL", "this feature arrives in the next DLL version"}},
+    {"dest_set", {"Destino: {coords}", "Destination: {coords}"}},
+    {"dest_cleared", {"Destino quitado", "Destination cleared"}},
+    {"no_dest_here", {"no hay destino en este planeta", "no destination on this planet"}},
+    {"out_of_range", {"coordenadas fuera de rango", "coordinates out of range"}},
+    {"bad_hotkey", {"tecla no valida", "invalid key"}},
+    {"marker_label", {"Destino", "Destination"}},
     {"error", {"error: {err}", "error: {err}"}},
 };
 
@@ -55,7 +61,76 @@ fs::path PathOf(const std::string& utf8) {
 #endif
 }
 
+std::string Trim(const std::string& s) {
+    const char* ws = " \t\r\n\f\v";
+    size_t a = s.find_first_not_of(ws);
+    if (a == std::string::npos) return "";
+    size_t b = s.find_last_not_of(ws);
+    return s.substr(a, b - a + 1);
+}
+
+// Numero de la consulta HTTP. Acepta "12.5" y "12,5"; false si no es un numero finito.
+bool ParseNumber(const Json& q, const char* key, double* out) {
+    if (!q.contains(key)) return false;
+    std::string t = q[key].is_string() ? Trim(q[key].get<std::string>()) : q[key].dump();
+    for (auto& c : t)
+        if (c == ',') c = '.';
+    if (t.empty()) return false;
+    char* end = nullptr;
+    double v = std::strtod(t.c_str(), &end);
+    if (!end || *end != '\0' || !std::isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
+std::string Lower(std::string s) {
+    for (auto& ch : s) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return s;
+}
+
+// Igual que push_history de Python: el mas reciente primero, sin repetir lat/lon, maximo 10.
+Json PushHistory(const Json& history, double lat, double lon, const std::string& name) {
+    Json entry{{"lat", geo::RoundTo(lat, 2)}, {"lon", geo::RoundTo(lon, 2)}, {"name", name}};
+    Json out = Json::array({entry});
+    if (history.is_array())
+        for (const auto& h : history) {
+            if (out.size() >= static_cast<size_t>(kHistoryMax)) break;
+            bool same = h.is_object() && h.contains("lat") && h.contains("lon") && h["lat"].is_number() &&
+                        h["lon"].is_number() && h["lat"].get<double>() == entry["lat"].get<double>() &&
+                        h["lon"].get<double>() == entry["lon"].get<double>();
+            if (!same) out.push_back(h);
+        }
+    return out;
+}
+
 }  // namespace
+
+const char* const kHotkeyChoices[8] = {"f5", "f6", "f7", "f8", "f9", "f10", "f11", "ninguna"};
+
+int HotkeyVirtualKey(const std::string& name) {
+    // VK_F5 = 0x74 ... VK_F11 = 0x7A
+    for (int i = 0; i < 7; ++i)
+        if (name == kHotkeyChoices[i]) return 0x74 + i;
+    return 0;
+}
+
+std::string Utf8TruncateBytes(const std::string& s, size_t max_bytes) {
+    if (s.size() <= max_bytes) return s;
+    size_t n = max_bytes;
+    while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;  // no partir un caracter
+    return s.substr(0, n);
+}
+
+std::string Utf8TruncateChars(const std::string& s, size_t max_chars) {
+    size_t chars = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) {
+            if (chars == max_chars) return s.substr(0, i);
+            ++chars;
+        }
+    }
+    return s;
+}
 
 std::string Tr(const std::string& key, const std::string& lang) {
     auto it = kMessages.find(key);
@@ -67,6 +142,7 @@ Core::Core(std::string data_path, std::string system_lang)
     : data_path_(std::move(data_path)), system_lang_(system_lang == "en" ? "en" : "es") {
     last_result_ = Json{{"ok", nullptr}, {"message", ""}, {"seq", 0}};
     Load();
+    UpdateHotkeyLocked();
     snapshot_ = Json{{"ok", true},         {"on_planet", false}, {"in_orbit", false},
                      {"reason", T("waiting")}, {"lat", nullptr},     {"lon", nullptr},
                      {"destination", nullptr}};
@@ -172,10 +248,44 @@ void Core::SetResult(bool ok, const std::string& message) {
     last_result_ = Json{{"ok", ok}, {"message", message}, {"seq", seq}};
 }
 
+// Tecla guardada, normalizada como normalize_hotkey de Python (desconocida -> f9).
+static std::string SavedHotkey(const Json& settings) {
+    std::string k = settings.contains("hotkey") && settings["hotkey"].is_string()
+                        ? Lower(Trim(settings["hotkey"].get<std::string>()))
+                        : "";
+    for (const char* c : kHotkeyChoices)
+        if (k == c) return k;
+    return "f9";
+}
+
+void Core::UpdateHotkeyLocked() { hotkey_vk_.store(HotkeyVirtualKey(SavedHotkey(data_["settings"]))); }
+
+void Core::SetMarkerLocked(const MarkerSpec& m) {
+    std::lock_guard<std::mutex> g(marker_mu_);
+    marker_ = m;
+}
+
+MarkerSpec Core::Marker() {
+    std::lock_guard<std::mutex> g(marker_mu_);
+    return marker_;
+}
+
+void Core::NoteMarkerCall(bool drawn) { ++(drawn ? marker_drawn_ : marker_skipped_); }
+
+void Core::KeyState(bool down, bool focused) {
+    bool press = down && !key_was_down_;
+    key_was_down_ = down;
+    if (press && focused) {
+        std::lock_guard<std::mutex> g(mu_);
+        ++input_request_id_;
+    }
+}
+
 // ---- un frame del juego (port de _read_context + _update) --------------------------------------
 void Core::Tick(const GameView* view, double now) {
     std::lock_guard<std::mutex> g(mu_);
     auto not_ready = [&](const std::string& reason) {
+        SetMarkerLocked(MarkerSpec{});
         context_ = nullptr;
         stable_key_.clear();
         snapshot_ = Json{{"ok", true},         {"on_planet", false}, {"in_orbit", false}, {"reason", reason},
@@ -274,6 +384,34 @@ void Core::Tick(const GameView* view, double now) {
             dest_info = nullptr;
         }
     }
+    // Marcador en el HUD: como _sync_marker + on_base_building_update de Python (metodo
+    // BaseBuildingHUD): solo con destino en este planeta y 1 s despues de llegar a el.
+    MarkerSpec m;
+    if (stable && dests.contains(key) && dests[key].is_object() && dests[key].contains("lat") &&
+        dests[key].contains("lon")) {
+        const Json& d = dests[key];
+        double dlat = d["lat"].get<double>(), dlon = d["lon"].get<double>();
+        std::string name = d.contains("name") && d["name"].is_string() ? d["name"].get<std::string>() : "";
+        geo::Vec3 u = geo::LatLonToUnit(dlat, dlon, convention, invert_lat);
+        geo::Vec3 tw{center.x + u.x * radius, center.y + u.y * radius, center.z + u.z * radius};
+        m.valid = true;
+        m.local[0] = static_cast<float>(tw.x - offset.x);
+        m.local[1] = static_cast<float>(tw.y - offset.y);
+        m.local[2] = static_cast<float>(tw.z - offset.z);
+        m.offset[0] = static_cast<float>(offset.x);
+        m.offset[1] = static_cast<float>(offset.y);
+        m.offset[2] = static_cast<float>(offset.z);
+        std::string label = name;
+        if (label.empty()) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), " %+.2f,%+.2f", dlat, dlon);
+            label = T("marker_label") + buf;
+        }
+        label = Utf8TruncateBytes(label, sizeof(m.label) - 1);
+        std::memcpy(m.label, label.data(), label.size());
+        m.label[label.size()] = '\0';
+    }
+    SetMarkerLocked(m);
     snapshot_ = Json{{"ok", true},
                      {"on_planet", !in_orbit},
                      {"in_orbit", in_orbit},
@@ -290,16 +428,17 @@ std::string Core::CoordsJson() {
     Json snap = snapshot_;
     snap["history"] = data_["history"];
     snap["last_result"] = last_result_;
-    snap["input_request_id"] = 0;
+    snap["input_request_id"] = input_request_id_;
     snap["version"] = kModVersion;
-    snap["hotkey"] = "ninguna";  // la tecla llega en el paso 4 del DLL
-    std::string saved = data_["settings"].value("hotkey", "f9");
+    std::string saved = SavedHotkey(data_["settings"]);
+    snap["hotkey"] = saved;  // en el DLL la tecla elegida se activa al momento
     snap["hotkey_saved"] = saved;
     snap["lang"] = LangLocked();
     return snap.dump(-1, ' ', false, Json::error_handler_t::replace);
 }
 
 std::string Core::DebugJson(const Json& extra) {
+    bool marker_valid = Marker().valid;
     std::lock_guard<std::mutex> g(mu_);
     Json d{{"snapshot", snapshot_},
            {"settings", data_["settings"]},
@@ -307,6 +446,10 @@ std::string Core::DebugJson(const Json& extra) {
            {"destinations", data_["destinations"]},
            {"context", context_},
            {"version", kModVersion},
+           {"active_marker", marker_valid},
+           {"marker_frames_drawn", marker_drawn_.load()},
+           {"marker_frames_skipped", marker_skipped_.load()},
+           {"hotkey", SavedHotkey(data_["settings"])},
            {"credits",
             {{"author", "MightyZeus"},
              {"repo", "https://github.com/ImMightyZeus/Olympian-Planet-Coords"},
@@ -329,8 +472,50 @@ std::string Core::Put(const std::string& route, const Json& query) {
         } else {
             r = Json{{"saved", false}, {"message", T("bad_lang")}};
         }
-    } else if (route == "hotkey" || route == "marker" || route == "clear") {
-        r = Json{{"queued", false}, {"saved", false}, {"message", T("dll_not_yet")}};
+    } else if (route == "hotkey") {
+        std::string k = Lower(Trim(query.value("key", "")));
+        bool ok = false;
+        for (const char* c : kHotkeyChoices) ok = ok || k == c;
+        if (!ok) {
+            r = Json{{"saved", false}, {"message", T("bad_hotkey")}};
+        } else {
+            data_["settings"]["hotkey"] = k;
+            Save();
+            UpdateHotkeyLocked();
+            r = Json{{"saved", true}, {"hotkey", k}, {"hotkey_saved", k}, {"pending_reload", false}};
+        }
+    } else if (route == "marker") {
+        // Igual que http_marker + _process_requests("place") de Python.
+        double lat = 0, lon = 0;
+        if (!ParseNumber(query, "lat", &lat) || !ParseNumber(query, "lon", &lon) || lat < -90 || lat > 90 ||
+            lon < -180 || lon > 180) {
+            r = Json{{"queued", false}, {"message", T("out_of_range")}};
+        } else {
+            std::string name = Utf8TruncateChars(Trim(query.value("name", "")), kNameMaxChars);
+            r = Json{{"queued", true}};
+            if (context_.is_null()) {
+                std::string reason = snapshot_.value("reason", "");
+                SetResult(false, reason.empty() ? T("not_on_planet") : reason);
+            } else {
+                std::string key = context_["planet_key"].get<std::string>();
+                data_["destinations"][key] =
+                    Json{{"lat", geo::RoundTo(lat, 2)}, {"lon", geo::RoundTo(lon, 2)}, {"name", name}};
+                data_["history"] = PushHistory(data_["history"], lat, lon, name);
+                Save();
+                std::string coords = FormatCoords(lat, lon) + (name.empty() ? "" : " " + name);
+                SetResult(true, Replace(T("dest_set"), "{coords}", coords));
+            }
+        }
+    } else if (route == "clear") {
+        r = Json{{"queued", true}};
+        std::string key = context_.is_null() ? "" : context_["planet_key"].get<std::string>();
+        if (key.empty() || !data_["destinations"].contains(key)) {
+            SetResult(false, T("no_dest_here"));
+        } else {
+            data_["destinations"].erase(key);
+            Save();
+            SetResult(true, T("dest_cleared"));
+        }
     } else {
         r = Json{{"detail", "Not Found"}};
     }

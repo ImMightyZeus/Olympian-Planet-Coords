@@ -94,6 +94,21 @@ static int RunCore(const std::string& path) {
             std::cout << core.Put(f["put"], q) << "\n" << std::flush;
             continue;
         }
+        if (f.contains("key")) {  // estado de la tecla en un frame
+            core.KeyState(f["key"].get<bool>(), f.value("focused", true));
+            std::cout << core.CoordsJson() << "\n" << std::flush;
+            continue;
+        }
+        if (f.value("marker", false)) {  // marcador que dibujaria el hook del HUD
+            olympian::MarkerSpec m = core.Marker();
+            Json o{{"valid", m.valid},
+                   {"local", {m.local[0], m.local[1], m.local[2]}},
+                   {"offset", {m.offset[0], m.offset[1], m.offset[2]}},
+                   {"label", std::string(m.label)},
+                   {"vk", core.HotkeyVk()}};
+            std::cout << o.dump() << "\n" << std::flush;
+            continue;
+        }
         if (f.value("none", false)) {
             core.Tick(nullptr, f.value("t", 0.0));
         } else {

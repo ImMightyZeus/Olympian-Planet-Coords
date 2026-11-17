@@ -12,6 +12,37 @@
 extern "C" void FakeUpdate(void* app);
 extern "C" void FakeStateChange(void* fsm, void* state, void* data, unsigned long long force);
 extern "C" void FakeSignatures();
+extern "C" void FakeBbmUpdate(void* bbm, float dt);
+extern "C" void FakeAddHudMarker(void* bbm, int type, const void* mat, int colour, const char* name);
+
+// cGcBaseBuildingManager falso: this+0x60 -> objeto con +0x1e8 -> tabla de colores (como el juego).
+static unsigned char g_bbm[0x100];
+static unsigned char g_bbm_inner[0x200];
+static unsigned char g_colours[0x100];
+static unsigned char g_bbm_bad[0x100];  // sin +0x60: el DLL no debe llamar a AddHUDMarker
+static unsigned long g_hud_calls = 0, g_hud_bad_this = 0, g_bbm_body = 0;
+static int g_hud_type = -1, g_hud_colour = -1;
+static float g_hud_local[3], g_hud_offset[3], g_hud_right[3];
+static char g_hud_name[65];
+
+extern "C" void FakeBbmBody(void* self, float dt) {
+    (void)self;
+    (void)dt;
+    ++g_bbm_body;
+}
+
+extern "C" void FakeAddHudBody(void* self, int type, const void* mat, int colour, const char* name) {
+    if (self != g_bbm) ++g_hud_bad_this;
+    ++g_hud_calls;
+    g_hud_type = type & 0xFF;  // el juego solo usa dl
+    g_hud_colour = colour;
+    const float* m = (const float*)mat;
+    memcpy(g_hud_right, m, sizeof(g_hud_right));
+    memcpy(g_hud_local, m + 12, sizeof(g_hud_local));   // +0x30
+    memcpy(g_hud_offset, m + 16, sizeof(g_hud_offset));  // +0x40
+    memcpy(g_hud_name, name, 64);
+    g_hud_name[64] = 0;
+}
 
 static unsigned char g_app[0x100];
 static unsigned char g_decoy[0x100];  // otro cTkFSM (no es la aplicacion)
@@ -52,6 +83,11 @@ int main(int argc, char** argv) {
     // vacios y no debe confundirse con la aplicacion.
     uintptr_t dd = (uintptr_t)g_decoy_data;
     memcpy(g_decoy + APP_MPDATA, &dd, sizeof(dd));
+    uintptr_t inner = (uintptr_t)g_bbm_inner, colours = (uintptr_t)g_colours;
+    memcpy(g_bbm + 0x60, &inner, sizeof(inner));
+    memcpy(g_bbm_inner + 0x1e8, &colours, sizeof(colours));
+    volatile void* keep2 = (void*)&FakeAddHudMarker;
+    (void)keep2;
     Sleep(1500);  // el DLL instala sus hooks al cargar
     FakeStateChange(g_decoy, nullptr, nullptr, 0);
     FakeStateChange(g_app, nullptr, nullptr, 0);
@@ -71,9 +107,18 @@ int main(int argc, char** argv) {
             put3(penv + PENV_PLAYERTM + TM_POS, 100 + cos(la) * sin(lo) * R, -50 + sin(la) * R, 20 + cos(la) * cos(lo) * R);
         }
         FakeUpdate((void*)0x1234);  // como el juego real: rcx NO es la aplicacion
+        FakeBbmUpdate(g_bbm_bad, 0.016f);
+        FakeBbmUpdate(g_bbm, 0.016f);
         ++frames;
         Sleep(16);
     }
     printf("frames=%lu\n", frames);
+    printf("bbm_body=%lu hud_calls=%lu hud_bad_this=%lu type=0x%x colour=%d\n", g_bbm_body, g_hud_calls,
+           g_hud_bad_this, g_hud_type, g_hud_colour);
+    printf("hud_local=%.3f,%.3f,%.3f hud_offset=%.3f,%.3f,%.3f hud_right=%.1f,%.1f,%.1f\n", g_hud_local[0],
+           g_hud_local[1], g_hud_local[2], g_hud_offset[0], g_hud_offset[1], g_hud_offset[2], g_hud_right[0],
+           g_hud_right[1], g_hud_right[2]);
+    printf("hud_name=%s\n", g_hud_name);
+    fflush(stdout);
     return 0;
 }
