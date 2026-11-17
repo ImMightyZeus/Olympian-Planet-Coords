@@ -89,6 +89,23 @@ int main(int argc, char** argv) {
     volatile void* keep2 = (void*)&FakeAddHudMarker;
     (void)keep2;
     Sleep(1500);  // el DLL instala sus hooks al cargar
+    // Como el juego: crea una instancia de Vulkan con el cargador (la sonda del DLL la debe ver pasar).
+    {
+        HMODULE vk = LoadLibraryA("vulkan-1.dll");
+        typedef int (*CreateInstanceFn)(const void*, const void*, void**);
+        CreateInstanceFn ci = vk ? (CreateInstanceFn)(void*)GetProcAddress(vk, "vkCreateInstance") : nullptr;
+        if (ci) {
+            struct { int sType; const void* pNext; const char* app; unsigned av; const char* eng; unsigned ev; unsigned api; }
+                ai = {0, nullptr, "No Man's Sky (falso)", 1, "fake", 1, (1u << 22) | (2u << 12)};
+            struct { int sType; const void* pNext; unsigned flags; const void* pApp; unsigned lc; const char* const* ln;
+                     unsigned ec; const char* const* en; } info = {1, nullptr, 0, &ai, 0, nullptr, 0, nullptr};
+            void* inst = nullptr;
+            printf("vkCreateInstance=%d\n", ci(&info, nullptr, &inst));
+        } else {
+            printf("vkCreateInstance=no_loader\n");
+        }
+        fflush(stdout);
+    }
     FakeStateChange(g_decoy, nullptr, nullptr, 0);
     FakeStateChange(g_app, nullptr, nullptr, 0);
 

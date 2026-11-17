@@ -19,7 +19,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.1.0-beta";  // primera version para jugadores (= dll.4 aprobada)
+constexpr const char* kModVersion = "0.2.0-dev.1";  // v0.2 en desarrollo: sonda de Vulkan (solo diagnostico)
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;

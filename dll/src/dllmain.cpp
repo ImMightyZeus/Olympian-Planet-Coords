@@ -48,9 +48,10 @@
 #include "http_server.hpp"
 #include "nms_sigs.h"
 #include "routes.hpp"
+#include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.1.0-beta"
+#define OLYMPIAN_VERSION "0.2.0-dev.1"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -86,6 +87,7 @@ olympian::Json g_debug_extra = olympian::Json::object();
 std::atomic<unsigned long long> g_frames{0};
 std::atomic<unsigned long long> g_frames_with_game{0};
 std::atomic<uintptr_t> g_app{0};
+unsigned long long g_start_s = 0;
 
 // cGcBaseBuildingManager::Update(this, float lfTimeStep) y AddHUDMarker (desensamblado en 185034:
 // rcx=this, dl=tipo, r8=matriz cTkPhysRelMat34 (lee +0x30 local y +0x40 offset), r9d=color,
@@ -356,7 +358,25 @@ uintptr_t FindPattern(const Pattern& pat, int* count) {
     return first;
 }
 
+HWND GameWindow() {
+    FindWin f;
+    EnumWindows(FindGameWindow, reinterpret_cast<LPARAM>(&f));
+    return f.best;
+}
+
+// Informes de la sonda de Vulkan: a los 20 s, 1 min, 3 min y luego cada 10 min.
+DWORD WINAPI VkReportThread(LPVOID) {
+    const DWORD waits[] = {20000, 40000, 120000};
+    char when[32];
+    for (int i = 0;; ++i) {
+        Sleep(i < 3 ? waits[i] : 600000);
+        snprintf(when, sizeof(when), "%llu s", static_cast<unsigned long long>(GetTickCount64() / 1000 - g_start_s));
+        olympian::VkProbeReport(when, GameWindow());
+    }
+}
+
 DWORD WINAPI Worker(LPVOID) {
+    g_start_s = GetTickCount64() / 1000;
     // Log junto al juego; si Windows no deja escribir ahi (sin admin), en %LOCALAPPDATA%.
     std::wstring dir = ExeDir() + L"\\Olympian";
     CreateDirectoryW(dir.c_str(), nullptr);
@@ -380,6 +400,9 @@ DWORD WINAPI Worker(LPVOID) {
             "actualizar Olympian para esta version.");
         return 0;
     }
+    // Sonda de Vulkan (solo anota; no dibuja): lo antes posible, para ver la creacion del dispositivo.
+    olympian::VkProbeInstall(&Log);
+    CreateThread(nullptr, 0, VkReportThread, nullptr, 0, nullptr);
     uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     // El juego puede seguir preparando su codigo cuando Windows carga este DLL: si falta alguna
     // funcion, se reintenta cada segundo durante 90 s antes de rendirse.
@@ -442,6 +465,7 @@ DWORD WINAPI Worker(LPVOID) {
             snprintf(buf, sizeof(buf), "0x%llx", static_cast<unsigned long long>(gval));
             extra["dll"]["update_global"] = buf;
             extra["dll"]["bbm_frames"] = g_bbm_frames.load();
+            extra["vulkan"] = olympian::Json::parse(olympian::VkProbeJson());
             olympian::HttpResponse res = olympian::Route(*g_core, req, extra);
             if (req.method == "PUT" && req.path.find("/marker") != std::string::npos &&
                 res.body.find("\"queued\":true") != std::string::npos)
@@ -471,6 +495,7 @@ DWORD WINAPI Worker(LPVOID) {
         }
     }
     MH_STATUS mh = MH_Initialize();
+    if (mh == MH_ERROR_ALREADY_INITIALIZED) mh = MH_OK;  // la sonda de Vulkan ya lo inicio
     // Marcador del HUD: si este hook fallara, las coordenadas siguen funcionando igual.
     void* bbm_target = reinterpret_cast<void*>(
         FindPattern(ParsePattern(kNmsSigs[FN_cGcBaseBuildingManager_Update].pattern), &count));

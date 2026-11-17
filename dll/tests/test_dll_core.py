@@ -140,7 +140,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.1.0-beta" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.1" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -472,6 +472,10 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         log = open(os.path.join(game, "Olympian", "olympian.log"), encoding="utf-8").read()
         assert "cGcApplication reconocido (candidato 2 de 2)" in log, log
         assert "Hook cGcBaseBuildingManager::Update (marcador del HUD): MH_OK" in log, log
+        # sonda de Vulkan: engancha el cargador y ve pasar la instancia que crea el "juego"
+        assert "[vk] gancho vkQueuePresentKHR: MH_OK" in log, log
+        if "vkCreateInstance=no_loader" not in out:
+            assert "[vk] vkCreateInstance -> " in log and "No Man's Sky (falso)" in log, log
         res = dict(kv.split("=", 1) for line in out.splitlines() for kv in line.split(" ") if "=" in kv)
         assert int(res["hud_calls"]) > 0 and res["hud_bad_this"] == "0", out
         assert int(res["bbm_body"]) >= 2 * int(res["hud_calls"]), out  # el juego sigue haciendo lo suyo
