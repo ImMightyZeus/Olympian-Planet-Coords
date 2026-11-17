@@ -1,17 +1,25 @@
-// Olympian Planet Coords (DLL) - fase 1: cargador + sonda de compatibilidad
+// Olympian Planet Coords (DLL) - paso 2: coordenadas en vivo para el overlay
+// Olympian Planet Coords (DLL) - step 2: live coordinates for the overlay
 //
-// Desarrollado por MightyZeus, originario de Nicaragua - Copyright (c) 2026 MightyZeus
-// GitHub: https://github.com/ImMightyZeus  -  Apoyo: https://paypal.me/ImMightyZeus
-// Agradecimientos a mi querida esposa, a mi familia y a Pangro Daer Barun D'Gross por seguirme
-// corrompiendo con videojuegos.
+// Olympian Planet Coords — Copyright © 2026 MightyZeus · Licencia GPL-3.0
+// Apoya el proyecto: https://paypal.me/ImMightyZeus · Repositorio: https://github.com/ImMightyZeus/Olympian-Planet-Coords
 //
-// Se instala como "winmm.dll" junto a NMS.exe. Windows lo carga en lugar del winmm.dll del
-// sistema; este DLL carga el verdadero (System32) y le reenvia todas las llamadas, asi que el
-// juego funciona igual. Ademas:
+// Agradecimientos:
+// A mi querida esposa y mi amada familia, por permitirme seguir siendo un niño aun en mi adultez.
+// Pangro Daer Barun D'Gross, por seguirme corrompiendo con videojuegos.
+// Fenrir, porque aunque ya casi no juega, aún se presta a conversar sobre mis aventuras y desventuras.
+//
+// Proyecto hecho por fans, sin relacion con Hello Games. Se desarrolla con la ayuda de una IA (Claude);
+// la direccion del proyecto y las pruebas en el juego real son trabajo humano.
+//
+// Se instala como "winmm.dll" junto a NMS.exe. Windows lo carga en lugar del winmm.dll del sistema;
+// este DLL carga el verdadero (System32) y le reenvia todas las llamadas, asi que el juego funciona
+// igual. Ademas:
 //   1. Comprueba que la version de NMS.exe sea la esperada (si no, no hace nada mas).
-//   2. Busca en NMS.exe las funciones que usara el mod (patrones de NMS.py) y lo anota en
-//      Binaries\Olympian\olympian.log.
-// En esta fase NO instala ningun hook ni toca la memoria del juego.
+//   2. Busca en NMS.exe las funciones del juego (patrones de NMS.py) y lo anota en el log.
+//   3. Engancha cGcApplication::Update: en cada frame LEE (nunca escribe) la posicion del jugador
+//      y el planeta, y calcula las coordenadas igual que la version Python v0.0.3.
+//   4. Sirve esas coordenadas en http://127.0.0.1:5000/OlympianPlanetCoords/ para el overlay.
 
 #include <windows.h>
 
@@ -22,11 +30,19 @@
 #include <string>
 #include <vector>
 
+#include <atomic>
+#include <memory>
+
 #include "MinHook.h"
+#include "core.hpp"
+#include "game_reader.hpp"
+#include "http_server.hpp"
 #include "nms_sigs.h"
+#include "routes.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.0.1-dll-fase1"
+#define OLYMPIAN_VERSION "0.1.0-dll.2"
+constexpr int kHttpPort = 5000;
 
 extern "C" {
 // Tabla que usan los saltos de winmm_stubs.S (un puntero por export, en el mismo orden).
@@ -41,6 +57,52 @@ FILE* g_log = nullptr;
 CRITICAL_SECTION g_log_lock;
 
 UINT WINAPI MissingExport() { return 0; }  // export que no existe en este Windows
+
+// ---- estado del mod --------------------------------------------------------------------------
+using UpdateFn = void (*)(void*);
+UpdateFn g_orig_update = nullptr;
+std::unique_ptr<olympian::Core> g_core;
+std::unique_ptr<olympian::HttpServer> g_http;
+olympian::Json g_debug_extra = olympian::Json::object();
+std::atomic<unsigned long long> g_frames{0};
+std::atomic<unsigned long long> g_frames_with_game{0};
+std::atomic<uintptr_t> g_app{0};
+
+std::string Utf8(const std::wstring& w) {
+    if (w.empty()) return "";
+    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+    std::string s(static_cast<size_t>(n), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
+    return s;
+}
+
+// %LOCALAPPDATA%\OlympianPlanetCoords\datos.json: el mismo archivo que usa la version Python.
+std::wstring DataDir() {
+    wchar_t local[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
+    if (!n || n >= MAX_PATH) return L"";
+    return std::wstring(local, n) + L"\\OlympianPlanetCoords";
+}
+
+std::string SystemLang() {
+    return (GetUserDefaultUILanguage() & 0x3FF) == 0x0A ? "es" : "en";
+}
+
+// Se ejecuta en el hilo del juego, una vez por frame. Primero el juego hace lo suyo; despues se lee.
+void HookedUpdate(void* app) {
+    g_orig_update(app);
+    ++g_frames;
+    if (!g_core) return;
+    try {
+        g_app = reinterpret_cast<uintptr_t>(app);
+        olympian::GameView view;
+        bool ok = olympian::ReadGameView(reinterpret_cast<uintptr_t>(app), &view);
+        if (ok) ++g_frames_with_game;
+        g_core->Tick(ok ? &view : nullptr, static_cast<double>(GetTickCount64()) / 1000.0);
+    } catch (...) {
+        // Nunca dejar que un error del mod llegue al juego.
+    }
+}
 
 std::wstring ExeDir() {
     wchar_t path[MAX_PATH];
@@ -172,19 +234,73 @@ DWORD WINAPI Worker(LPVOID) {
         return 0;
     }
     uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    // El juego puede seguir preparando su codigo cuando Windows carga este DLL: si falta alguna
+    // funcion, se reintenta cada segundo durante 90 s antes de rendirse.
     int ok = 0;
-    for (int i = 0; i < FN_COUNT; ++i) {
-        int count = 0;
-        uintptr_t addr = FindPattern(ParsePattern(kNmsSigs[i].pattern), &count);
-        Log("%-40s %s  rva=0x%llx  coincidencias=%d", kNmsSigs[i].name, addr ? "OK " : "NO ",
-            static_cast<unsigned long long>(addr ? addr - base : 0), count);
-        if (addr && count == 1) ++ok;
+    for (int attempt = 0; attempt < 90; ++attempt) {
+        ok = 0;
+        bool log_now = attempt == 0 || attempt == 89;
+        for (int i = 0; i < FN_COUNT; ++i) {
+            int count = 0;
+            uintptr_t addr = FindPattern(ParsePattern(kNmsSigs[i].pattern), &count);
+            if (addr && count == 1) ++ok;
+            if (log_now)
+                Log("%-40s %s  rva=0x%llx  coincidencias=%d", kNmsSigs[i].name, addr ? "OK " : "NO ",
+                    static_cast<unsigned long long>(addr ? addr - base : 0), count);
+        }
+        if (ok == FN_COUNT) {
+            if (attempt > 0) Log("Funciones encontradas en el intento %d.", attempt + 1);
+            break;
+        }
+        if (attempt == 0) Log("Faltan funciones (%d/%d); se reintenta cada segundo...", ok, static_cast<int>(FN_COUNT));
+        Sleep(1000);
     }
+    if (ok != FN_COUNT) {
+        Log("No se encontraron todas las funciones: el mod queda desactivado (el juego funciona normal).");
+        return 0;
+    }
+
+    // Datos (mismo datos.json que la version Python) y servidor para el overlay.
+    std::wstring ddir = DataDir();
+    if (ddir.empty()) {
+        Log("No se encontro %%LOCALAPPDATA%%: el mod queda desactivado.");
+        return 0;
+    }
+    CreateDirectoryW(ddir.c_str(), nullptr);
+    std::string data_path = Utf8(ddir + L"\\datos.json");
+    g_core = std::make_unique<olympian::Core>(data_path, SystemLang());
+    Log("Datos: %s  idioma=%s", data_path.c_str(), g_core->Lang().c_str());
+
+    g_debug_extra = olympian::Json{{"dll", {{"version", OLYMPIAN_VERSION},
+                                            {"nms_build", ver},
+                                            {"functions_found", ok},
+                                            {"functions_total", static_cast<int>(FN_COUNT)}}}};
+    g_http = std::make_unique<olympian::HttpServer>();
+    std::string err;
+    bool http_ok = g_http->Start(
+        kHttpPort,
+        [](const olympian::HttpRequest& req) {
+            olympian::Json extra = g_debug_extra;
+            extra["dll"]["frames"] = g_frames.load();
+            extra["dll"]["frames_with_game"] = g_frames_with_game.load();
+            return olympian::Route(*g_core, req, extra);
+        },
+        &err);
+    if (http_ok)
+        Log("Servidor para el overlay: http://127.0.0.1:%d/OlympianPlanetCoords/coords", kHttpPort);
+    else
+        Log("No se pudo abrir el servidor del overlay (%s). Si NMS.py esta abierto, cierralo: usan el mismo "
+            "puerto.", err.c_str());
+
+    // Engancha cGcApplication::Update (se ejecuta una vez por frame en el hilo del juego).
+    int count = 0;
+    void* target = reinterpret_cast<void*>(FindPattern(ParsePattern(kNmsSigs[FN_cGcApplication_Update].pattern), &count));
     MH_STATUS mh = MH_Initialize();
-    Log("MinHook: %s", MH_StatusToString(mh));
-    if (mh == MH_OK) MH_Uninitialize();
-    Log("RESULTADO: %d/%d funciones encontradas de forma unica. Fase 1 no instala hooks.", ok,
-        static_cast<int>(FN_COUNT));
+    if (mh == MH_OK)
+        mh = MH_CreateHook(target, reinterpret_cast<void*>(&HookedUpdate), reinterpret_cast<void**>(&g_orig_update));
+    if (mh == MH_OK) mh = MH_EnableHook(target);
+    Log("Hook cGcApplication::Update: %s", MH_StatusToString(mh));
+    Log(mh == MH_OK ? "LISTO: coordenadas en vivo activas." : "El hook fallo: el mod queda desactivado.");
     return 0;
 }
 

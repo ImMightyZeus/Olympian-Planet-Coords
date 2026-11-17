@@ -86,4 +86,4 @@ pip install nmspy==185034.0 pillow fastapi uvicorn httpx
 cd tests && python test_mod.py && python test_overlay.py
 ```
 
-DLL: `cd dll && sh build.sh` (requiere `x86_64-w64-mingw32-g++`).
+DLL: `cd dll && sh build.sh` (requiere `x86_64-w64-mingw32-g++`). Pruebas del núcleo del DLL contra la versión Python (y, con Wine, el DLL completo con un juego falso): `python dll/tests/test_dll_core.py`.

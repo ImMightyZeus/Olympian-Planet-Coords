@@ -10,7 +10,8 @@ mkdir -p build/obj
 for f in buffer hook trampoline; do $CC -O2 -c third_party/src/$f.c -Ithird_party/include -o build/obj/$f.o; done
 $CC -O2 -c third_party/src/hde/hde64.c -o build/obj/hde64.o
 $CC -c src/winmm_stubs.S -o build/obj/winmm_stubs.o
-$CXX -O2 -std=c++17 -Wall -Wextra -Ithird_party/include -c src/dllmain.cpp -o build/obj/dllmain.o
+CXXFLAGS="-O2 -std=c++17 -Wall -Wextra -Ithird_party/include -Ithird_party"
+for f in dllmain core game_reader http_server; do $CXX $CXXFLAGS -c src/$f.cpp -o build/obj/$f.o; done
 $CXX -shared -o build/winmm.dll build/obj/*.o src/winmm.def \
-    -static -static-libgcc -static-libstdc++ -lversion -Wl,--enable-stdcall-fixup -s
+    -static -static-libgcc -static-libstdc++ -lversion -lws2_32 -Wl,--enable-stdcall-fixup -s
 echo "OK: build/winmm.dll"
