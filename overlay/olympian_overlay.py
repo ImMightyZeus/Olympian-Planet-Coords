@@ -199,7 +199,8 @@ class CoordsError(ValueError):
         self.code = code
 
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# Carpeta de recursos (fuentes, icono). Empaquetado con PyInstaller, los archivos viven en sys._MEIPASS.
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
 FONT_FILES = [os.path.join(HERE, "fonts", "DSEG7Classic-Bold.ttf"),
               os.path.join(HERE, "fonts", "ShareTechMono-Regular.ttf")]
 NUM_FAMILY = "DSEG7 Classic"

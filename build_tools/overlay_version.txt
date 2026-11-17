@@ -1,0 +1,30 @@
+# Datos de version del .exe (Windows VERSIONINFO) / .exe version data
+# Mantener filevers/prodvers y las cadenas iguales a VERSION de overlay/olympian_overlay.py
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 0, 3, 0),
+    prodvers=(0, 0, 3, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '040904B0',
+        [StringStruct('CompanyName', 'MightyZeus'),
+         StringStruct('FileDescription', 'Olympian Planet Coords - Overlay'),
+         StringStruct('FileVersion', '0.0.3'),
+         StringStruct('InternalName', 'OlympianPlanetCoords-Overlay'),
+         StringStruct('LegalCopyright', 'Copyright (c) 2026 MightyZeus - GPL-3.0'),
+         StringStruct('OriginalFilename', 'OlympianPlanetCoords-Overlay.exe'),
+         StringStruct('ProductName', 'Olympian Planet Coords'),
+         StringStruct('ProductVersion', '0.0.3'),
+         StringStruct('Comments', 'Fan-made, not affiliated with Hello Games. https://github.com/ImMightyZeus/Olympian-Planet-Coords')])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)

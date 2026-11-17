@@ -19,3 +19,7 @@ OlympianPlanetCoords_v*/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# PyInstaller
+build/
+dist/
