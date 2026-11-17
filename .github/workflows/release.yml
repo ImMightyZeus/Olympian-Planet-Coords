@@ -1,0 +1,136 @@
+# Publica una pre-release en GitHub: compila el overlay (.exe) y el DLL, arma el paquete y lo sube.
+# Publishes a GitHub pre-release: builds the overlay (.exe) and the DLL, assembles the package and uploads it.
+# Se lanza a mano: Actions -> release -> Run workflow / Run it by hand: Actions -> release -> Run workflow.
+#
+# Olympian Planet Coords — Copyright © 2026 MightyZeus · GPL-3.0 License
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (must match overlay VERSION and the DLL), e.g. 0.1.0-beta"
+        required: true
+        default: "0.1.0-beta"
+      prerelease:
+        description: "Mark as pre-release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Version check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Same version everywhere / misma versión en todo
+        env:
+          V: ${{ inputs.version }}
+        run: |
+          grep -q "^VERSION = \"$V\"" overlay/olympian_overlay.py
+          grep -q "kModVersion = \"$V\"" dll/src/core.hpp
+          grep -q "#define OLYMPIAN_VERSION \"$V\"" dll/src/dllmain.cpp
+          grep -q "'ProductVersion', '$V'" build_tools/overlay_version.txt
+          grep -q "^## v$V " CHANGELOG.md
+          test -f ".github/release_notes/v$V.md"
+
+  overlay-exe:
+    name: Overlay .exe (Windows)
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Dependencias / dependencies
+        run: python -m pip install --upgrade pip pyinstaller==6.22.3 pillow==13.0.0
+      - name: Compilar / build
+        run: pyinstaller --noconfirm --clean build_tools/overlay.spec
+      - name: Licencias incluidas en el .exe / licenses bundled in the .exe
+        shell: python
+        run: |
+          import os, shutil, sys
+          from importlib import metadata
+          out = os.path.join("dist", "licenses")
+          os.makedirs(out, exist_ok=True)
+          shutil.copy(os.path.join(sys.base_prefix, "LICENSE.txt"), os.path.join(out, "Python-LICENSE.txt"))
+          for dist, prefix in (("pillow", "Pillow"), ("pyinstaller", "PyInstaller")):
+              found = [f for f in metadata.files(dist) if os.path.basename(str(f)).upper().startswith(("LICENSE", "COPYING"))]
+              assert found, f"no license file found for {dist}"
+              for f in found:
+                  shutil.copy(f.locate(), os.path.join(out, f"{prefix}-{os.path.basename(str(f))}"))
+          print(os.listdir(out))
+      - uses: actions/upload-artifact@v7
+        with:
+          name: overlay
+          path: |
+            dist/OlympianPlanetCoords-Overlay.exe
+            dist/licenses/
+          retention-days: 7
+
+  dll:
+    name: DLL (mingw-w64) + tests
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
+      - name: Compilar / build
+        run: sh dll/build.sh
+      - name: Importaciones / imports
+        run: x86_64-w64-mingw32-objdump -p dll/build/winmm.dll | grep "DLL Name"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dll
+          path: dll/build/winmm.dll
+          retention-days: 7
+
+  publish:
+    name: Package and publish
+    needs: [overlay-exe, dll]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      V: ${{ inputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: overlay
+          path: art/overlay
+      - uses: actions/download-artifact@v8
+        with:
+          name: dll
+          path: art/dll
+      - name: Armar el paquete / assemble the package
+        run: |
+          set -e
+          ls -R art
+          P="OlympianPlanetCoords_v$V"
+          mkdir -p "$P/Binaries" "$P/THIRD_PARTY_LICENSES"
+          cp art/dll/winmm.dll "$P/Binaries/winmm.dll"
+          cp art/overlay/OlympianPlanetCoords-Overlay.exe "$P/"
+          cp INSTRUCCIONES.md INSTRUCTIONS.md LICENSE "$P/"
+          cp art/overlay/licenses/* "$P/THIRD_PARTY_LICENSES/"
+          cp dll/third_party/MinHook-LICENSE.txt "$P/THIRD_PARTY_LICENSES/"
+          cp dll/third_party/nlohmann/LICENSE.MIT "$P/THIRD_PARTY_LICENSES/nlohmann-json-LICENSE.MIT.txt"
+          cp dll/tools/NMS.py-LICENSE.txt "$P/THIRD_PARTY_LICENSES/"
+          cp overlay/fonts/DSEG7-OFL.txt overlay/fonts/ShareTechMono-OFL.txt "$P/THIRD_PARTY_LICENSES/"
+          (cd "$P" && sha256sum Binaries/winmm.dll OlympianPlanetCoords-Overlay.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          zip -r -9 "$P.zip" "$P"
+          sha256sum "$P.zip" | tee "$P.zip.sha256"
+      - name: Publicar / publish
+        run: |
+          FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then FLAG="--prerelease"; fi
+          gh release create "v$V" "OlympianPlanetCoords_v$V.zip" "OlympianPlanetCoords_v$V.zip.sha256" \
+            --target "$GITHUB_SHA" --title "Olympian Planet Coords v$V" \
+            --notes-file ".github/release_notes/v$V.md" $FLAG

@@ -1,5 +1,5 @@
 """
-Olympian Planet Coords v0.0.3 - overlay de esquina superior izquierda
+Olympian Planet Coords v0.1.0-beta - overlay de esquina superior izquierda
 
 Olympian Planet Coords — Copyright © 2026 MightyZeus · Licencia GPL-3.0
 Apoya el proyecto: https://paypal.me/ImMightyZeus · Repositorio: https://github.com/ImMightyZeus/Olympian-Planet-Coords
@@ -49,7 +49,7 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
-VERSION = "0.0.3"
+VERSION = "0.1.0-beta"
 MOD_NAME = "OlympianPlanetCoords"
 CREDITS = {
     "author": "MightyZeus, originario de Nicaragua",
@@ -70,7 +70,7 @@ ALL_PROJECTS_URL = "https://github.com/ImMightyZeus"
 STRINGS = {
     "es": {
         "tag_now": "AHORA", "tag_dest": "DESTINO", "orbit": "ÓRBITA",
-        "waiting_mod": "Esperando a NMS.py…", "off_planet": "Fuera de un planeta",
+        "waiting_mod": "Esperando al mod (¿juego abierto?)…", "off_planet": "Fuera de un planeta",
         "dest_info": "a {dist} · rumbo {bearing}° {cardinal}",
         "hint_idle": "clic para ir a coordenadas", "hint_edit": "Enter · Esc · flechas: historial",
         "hist_empty": "historial vacío", "hist_pos": "historial {i}/{n}",
@@ -121,7 +121,7 @@ STRINGS = {
     },
     "en": {
         "tag_now": "NOW", "tag_dest": "DEST", "orbit": "ORBIT",
-        "waiting_mod": "Waiting for NMS.py…", "off_planet": "Not on a planet",
+        "waiting_mod": "Waiting for the mod (is the game running?)…", "off_planet": "Not on a planet",
         "dest_info": "{dist} away · bearing {bearing}° {cardinal}",
         "hint_idle": "click to go to coordinates", "hint_edit": "Enter · Esc · arrows: history",
         "hist_empty": "history is empty", "hist_pos": "history {i}/{n}",

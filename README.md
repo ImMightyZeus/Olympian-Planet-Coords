@@ -7,10 +7,10 @@ Type a latitude and longitude, get a HUD marker and a 3D arrow that guides you t
 
 <p align="center"><a href="README.es.md">Leer en español</a> · <a href="INSTRUCTIONS.md">Instructions</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
-## What it does (v0.0.3)
+## What it does (v0.1.0-beta)
 
 - **Live coordinates** in the top-left corner: on foot, in a ship, in a vehicle and in orbit.
-- **Destinations:** click the box (or press **F9** in game), type `lat, lon [name]`, press **Enter**, and a HUD marker appears.
+- **Destinations:** click the box (or press **F9** in game), type `lat, lon [name]`, press **Enter**, and a marker appears on the game's HUD.
 - **Distance and bearing** to the destination, plus a smooth-edged **3D arrow** that turns and tilts towards it.
 - **Arrival:** at 50 m or less the destination clears itself and the arrow turns into a sphere.
 - **One destination per planet**, remembered even if you leave; history of the last 10.
@@ -18,9 +18,11 @@ Type a latitude and longitude, get a HUD marker and a 3D arrow that guides you t
 
 ## Status
 
-This is the Python **lab version**: it runs on [NMS.py](https://github.com/monkeyman192/NMS.py) and is used to test every change in the real game before it reaches players. The player version will be a **DLL** you simply copy next to `NMS.exe` (`dll/` folder, in development).
+**v0.1.0-beta** is the first version for players: a `winmm.dll` you copy into the game's `Binaries` folder plus an overlay program (`OlympianPlanetCoords-Overlay.exe`). No Python or NMS.py needed. It works with No Man's Sky build **185034**; with any other build the DLL disables itself and the game runs normally. Download it from the [Releases](https://github.com/ImMightyZeus/Olympian-Planet-Coords/releases) page.
 
 Installation and usage: [INSTRUCTIONS.md](INSTRUCTIONS.md).
+
+The Python **lab version** (`mod/`, runs on [NMS.py](https://github.com/monkeyman192/NMS.py)) is still used to test changes in the real game before they reach the DLL: [mod/INSTRUCTIONS_NMSPY.md](mod/INSTRUCTIONS_NMSPY.md).
 
 ## What Olympian Planet Coords does and doesn't do
 
@@ -49,7 +51,9 @@ The underlying commitment doesn't change: building real solutions and tools from
 
 - NMS.py / pyMHF — monkeyman192, MIT (the patterns in `dll/tools/nmspy_data_185034.json` come from NMS.py; see `dll/tools/NMS.py-LICENSE.txt`).
 - MinHook — Tsuda Kageyu, BSD-2-Clause (`dll/third_party/MinHook-LICENSE.txt`).
-- Pillow — MIT-CMU (installed separately).
+- JSON for Modern C++ (nlohmann/json) — Niels Lohmann, MIT (`dll/third_party/nlohmann/LICENSE.MIT`).
+- Pillow — MIT-CMU (bundled in the overlay `.exe`; installed separately for the lab version).
+- Python (PSF) and the PyInstaller bootloader (GPL with exception), bundled in the overlay `.exe`.
 - DSEG7 Classic and Share Tech Mono fonts — SIL Open Font License 1.1 (`overlay/fonts/`).
 
 ## Credits
@@ -73,10 +77,10 @@ All projects: https://github.com/ImMightyZeus
 ## Development
 
 ```
-mod/        NMS.py mod
+mod/        NMS.py mod (lab version)
 overlay/    box and arrow (tkinter + Pillow)
 tests/      tests that run without the game
-dll/        DLL version in development (mingw-w64 + MinHook)
+dll/        DLL version for players (mingw-w64 + MinHook)
 ```
 
 Tests (Python 3.12+, Linux or Windows):

@@ -19,7 +19,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.1.0-dll.4";  // paso 3: destinos, marcador en el HUD y tecla
+constexpr const char* kModVersion = "0.1.0-beta";  // primera version para jugadores (= dll.4 aprobada)
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;

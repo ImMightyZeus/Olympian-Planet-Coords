@@ -1,4 +1,4 @@
-# Olympian Planet Coords — v0.0.3
+# Olympian Planet Coords — v0.1.0-beta
 
 ```
 Olympian Planet Coords — Copyright © 2026 MightyZeus · GPL-3.0 License
@@ -12,86 +12,77 @@ Fenrir, because even though he hardly plays anymore, he's still up for talking a
 
 Developed by **MightyZeus**, from Nicaragua. *Español: [INSTRUCCIONES.md](INSTRUCCIONES.md).*
 
-> These instructions are for the **release package** of each version (folder `OlympianPlanetCoords_vX.Y.Z`, with `GAMEDATA\MODS` and `OLYMPIAN_OVERLAY`). In the repository the same files live in `mod/` and `overlay/`.
->
+> **Beta version.** This is the first version for players: a DLL you copy next to the game and an on-screen box (`.exe`). No Python or NMS.py needed. It has been tested for hours in the real game, but it may still have rough edges: if you find one, please report it (see the end).
 
 ---
 
-A No Man's Sky mod (PC, Steam, Windows):
+Mod for No Man's Sky (PC, Steam, Windows):
 
 1. **Live coordinates** in the top-left corner (on foot, in a ship, in a vehicle and in orbit).
-2. **Click** the box (or **F9** in game) → type `lat, lon [name]` → **Enter** = destination with a HUD marker.
-3. **Distance and bearing** to the destination, and a smooth-edged **3D arrow** that turns and tilts towards it.
+2. **Click** the box (or press **F9** in game) → type `lat, lon [name]` → **Enter** = destination with a marker on the game's HUD. Focus returns to the game on its own.
+3. **Distance and bearing** to the destination, plus a smooth-edged **3D arrow** that turns and tilts towards it.
 4. On arrival (50 m or less) the destination clears itself; the arrow turns into a sphere and shrinks.
-5. **One destination per planet**, remembered even if you leave; it only shows on that planet.
+5. **One destination per planet**, remembered even if you leave; it only shows up on that planet.
 6. **History** of the last 10 destinations (↑ ↓ arrows in the text field).
-7. **Normal / Large size**, a configurable **hotkey** and **Spanish / English** language (right-click the box).
+7. **Size** Normal / Large, configurable **hotkey** and **language** English / Spanish (right-click the box).
 
-## What's new in v0.0.3
+## What's new in v0.1.0-beta
 
-- **F9 is the default hotkey** (previously F8). F8 is used by Imperial Galactic Map for "add to favourites". Change it with right-click → **Tecla** (F5 to F11, or Ninguna = none); it takes effect after **Reload Mod** in the NMS.py window.
-- **No longer stuck on "esperando al juego"** ("waiting for the game") if NMS.py is started with a save already loaded.
-- **Smooth-edged arrow**: drawn with Pillow and shown with real per-pixel transparency. Without Pillow, the previous arrow is used.
-- **Spanish and English**: right-click → **Idioma / Language**. Defaults to the Windows language. The mod's messages switch instantly; the NMS.py window labels switch after **Reload Mod**.
-- The box shows the mod's name (**OLYMPIAN PLANET COORDS**) instead of "COORDENADAS", and the windows use the mod's icon.
-- About window with the logo, the GPL-3.0 license, the acknowledgements, what the mod does and doesn't do, the AI disclosure and other projects.
+- **DLL version:** no more Python, NMS.py or commands. You copy one file next to the game and launch the game from Steam.
+- **The box is now a program** (`OlympianPlanetCoords-Overlay.exe`), with Pillow included.
+- **Hotkey changes take effect immediately** (right-click → **Key**): no more "Reload Mod".
+- Destinations, history and settings from the Python version are kept: it's the same `datos.json` file.
 
-## Folder contents
+## Package contents
 
 ```
-GAMEDATA\MODS\OlympianPlanetCoords.py   ← the mod (NMS.py loads it from here)
-OLYMPIAN_OVERLAY\                        ← the box, the arrow and the icon
+Binaries\winmm.dll                 ← the mod (goes in the game's Binaries folder)
+OlympianPlanetCoords-Overlay.exe   ← the box, the arrow and the menu
 INSTRUCCIONES.md / INSTRUCTIONS.md
-LICENSE                                  ← GNU GPL v3
+LICENSE                            ← GNU GPL v3
+THIRD_PARTY_LICENSES\              ← licenses of third-party components
+SHA256SUMS.txt                     ← hashes to check the files
 ```
 
-**Don't copy anything into the game folder.** NMS.py loads the mod from this folder. If the game's own `GAMEDATA\MODS` has any files (even a `__pycache__`), NMS shows the "Mod Warning" at startup: that game folder must be empty or not exist.
+## Installation (once)
 
-## Requirements (once)
+1. In Steam: right-click **No Man's Sky** → **Manage** → **Browse local files**. The game folder opens.
+2. Copy `Binaries\winmm.dll` from the package into the game's **`Binaries`** folder (the one with `NMS.exe`).
+   - If Windows says a `winmm.dll` already exists there, **don't replace it**: it belongs to another mod. Let us know.
+   - It works alongside Imperial Galactic Map (IGM uses a different file, `xinput9_1_0.dll`).
+3. Copy `OlympianPlanetCoords-Overlay.exe` wherever you like (for example, the desktop).
+4. In game: Options → Graphics → **Borderless**. In exclusive fullscreen the box stays behind the game.
 
-- Python **3.10 to 3.13** from python.org (3.14 doesn't work with NMS.py yet). To see which you have: `py --list`.
-- NMS.py: `py -3.13 -m pip install -U nmspy` (replace 3.13 with your version).
-- **New:** Pillow, for the smooth arrow: `py -3 -m pip install -U pillow` (with `-3`, the same Python that `iniciar_overlay.bat` uses).
-- NMS in **Borderless** mode (Options → Graphics). In fullscreen the box stays behind the game.
-
-## Configure NMS.py (once per version)
-
-In PowerShell: `py -3.13 -m pymhf config nmspy`
-
-1. **Set mod directory** → choose the `GAMEDATA\MODS` folder **of this version** (for example `...\OlympianPlanetCoords_v0.0.3\GAMEDATA\MODS`). Each new version lives in its own folder, so repeat this step when you update.
-2. **Recommended:** **Set game to start paused** → **No**. If left on Yes and NMS.py launches the game itself, the game freezes on startup.
+**The first time you open the `.exe`**, Windows may show "Windows protected your PC" (SmartScreen), because the program isn't digitally signed yet. Click **More info** → **Run anyway**. To check that the file is the original, compare its hash with `SHA256SUMS.txt` (in PowerShell: `Get-FileHash OlympianPlanetCoords-Overlay.exe`).
 
 ## Every time you play
 
-1. Launch **No Man's Sky from Steam** and **stay on the main menu**.
-2. In PowerShell: `py -3.13 -m pymhf run nmspy`. It should say `Found an already running instance`, and the log window `Loaded … mods`.
-3. Double-click `OLYMPIAN_OVERLAY\iniciar_overlay.bat`.
-4. Load your save.
+1. Launch **No Man's Sky from Steam**, as usual.
+2. Open `OlympianPlanetCoords-Overlay.exe` (before or after the game, either way).
+3. Load your save. Within a few seconds the box shows the coordinates.
 
 ## Usage
 
 - Formats: `+12.34, -56.78` · `12.34 -56.78 My base` · `12,34; -56,78; My base` (decimal comma → `;`).
 - **Esc** cancels. **Right-click**: Size, Key, Idioma / Language, Clear this planet's destination, About, Move, Exit (shown in the chosen language).
+- **Hotkey:** F9 by default (F8 is used by Imperial Galactic Map). You can pick F5 to F11, or "None (click only)". It only responds while the game is in the foreground.
 - The bearing is relative to the planet's north. The arrow is relative to the front of your ship (or your character on foot).
 
-## Settings in the NMS.py window (saved automatically)
+## Game version
 
-Shown in English when English is selected (after **Reload Mod**); the Spanish names are listed here too.
+This beta works with **No Man's Sky build 185034** (the version of the `NMS.exe` file). When the game updates, the DLL detects it and **disables itself**: the game runs normally and the box stays on "Waiting for the mod". In that case, wait for the mod version for that patch.
 
-| Setting | What it's for |
-|---|---|
-| Cal. longitud / Cal. inv. latitud / Cal. centro local | Longitude / latitude / local-centre calibration, if the coordinates don't match the Analysis Visor. |
-| Posicion / Pos. + offset | Position source: leave on `Entorno` / unchecked (follows the ship). |
-| Flecha inv. | Invert arrow, if it points backwards. |
-| Marcador | Marker method: leave on `BaseBuildingHUD`. |
-| Tecla / Key (Reload Mod) | Same hotkey as the box menu. Takes effect after **Reload Mod**. |
-| Idioma / Language (Reload Mod) | Language of the mod's messages; the overlay keeps it in sync. This window's labels switch after **Reload Mod**. |
+## Uninstall
+
+Delete `winmm.dll` from the game's `Binaries` folder (and the `Binaries\Olympian` folder, which holds the log). Your destinations live in `%LOCALAPPDATA%\OlympianPlanetCoords\`; delete it too if you're not coming back.
+
+**Don't run the DLL version and the NMS.py lab version at the same time**: both use port 5000.
 
 ## If something fails, include this when reporting it (GitHub Issues)
 
-1. The last ~40 lines of the NMS.py log window.
-2. `http://localhost:5000/OlympianPlanetCoords/debug` (in a browser, while on a planet).
-3. If the arrow doesn't look smooth: the overlay starts with `pyw`, which shows no messages. Run `py -3 OLYMPIAN_OVERLAY\olympian_overlay.py` in PowerShell and copy what it prints.
+1. The mod's log: `Binaries\Olympian\olympian.log` in the game folder (if Windows doesn't allow writing there: `%LOCALAPPDATA%\OlympianPlanetCoords\olympian.log`).
+2. `http://localhost:5000/OlympianPlanetCoords/debug` (in a browser, with the game running and while on a planet).
+3. What you were doing and, if you can, a screenshot.
 
 ## What Olympian Planet Coords does and doesn't do
 
@@ -103,7 +94,7 @@ Every mod or editor changes the game, and Olympian Planet Coords is no exception
 4. **It will put your safety first:** backups before any change to your save, as little intrusion as possible, and clear warnings when something carries risk.
 5. **It will be transparent:** open source, not affiliated with Hello Games, and it will explain what each feature does and doesn't do.
 
-In this mod: it only reads the player's position and places a HUD marker like the ones the game already uses. It does not modify your save, your inventory or anything stored in the save file.
+In this mod: it only reads the player's position and places a HUD marker like the ones the game already uses (the game draws it, and it is requested again every frame). It does not modify your save, your inventory or anything stored in the save file. It doesn't touch any game files: it only adds `winmm.dll`, which you delete to uninstall.
 
 ## AI Disclosure
 
@@ -112,10 +103,14 @@ The underlying commitment doesn't change: building real solutions and tools from
 
 ## Third-party licenses
 
+Full texts in `THIRD_PARTY_LICENSES\`.
+
 - Olympian Planet Coords: GNU GPL v3.0 (LICENSE file).
-- NMS.py / pyMHF — monkeyman192, MIT license.
-- Pillow — MIT-CMU license (installed separately with pip).
-- DSEG7 Classic (keshikan) and Share Tech Mono (Carrois Type Design) fonts — SIL Open Font License 1.1 (texts in `OLYMPIAN_OVERLAY\fonts\`).
+- MinHook — Tsuda Kageyu, BSD-2-Clause license (inside the DLL).
+- JSON for Modern C++ (nlohmann/json) — Niels Lohmann, MIT license (inside the DLL).
+- Game function patterns taken from NMS.py / pyMHF — monkeyman192, MIT license.
+- Inside the `.exe`: Python (PSF license), Pillow (MIT-CMU license) and the PyInstaller bootloader (GPL with exception).
+- DSEG7 Classic (keshikan) and Share Tech Mono (Carrois Type Design) fonts — SIL Open Font License 1.1.
 
 ## Other MightyZeus projects for No Man's Sky
 

@@ -50,7 +50,7 @@
 #include "routes.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.1.0-dll.4"
+#define OLYMPIAN_VERSION "0.1.0-beta"
 constexpr int kHttpPort = 5000;
 
 extern "C" {

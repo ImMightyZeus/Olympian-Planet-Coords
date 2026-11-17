@@ -231,7 +231,7 @@ o._on_coords(dict(base, lat=None, lon=None, on_planet=False, reason="no estas en
 assert o._layout == ["message"]
 o._results.put(("offline", "x"))
 o._drain()
-assert o.message.cget("text") == "Esperando a NMS.py…"
+assert o.message.cget("text") == "Esperando al mod (¿juego abierto?)…"
 # acerca de
 o.show_about()
 o.root.update()
@@ -248,7 +248,7 @@ def all_label_texts(w):
 
 
 texts = " ".join(all_label_texts(about))
-for needed in ("v0.0.3", "MightyZeus, originario de Nicaragua", "https://github.com/ImMightyZeus/Olympian-Planet-Coords",
+for needed in ("v0.1.0-beta", "MightyZeus, originario de Nicaragua", "https://github.com/ImMightyZeus/Olympian-Planet-Coords",
                "https://paypal.me/ImMightyZeus", "Pangro Daer Barun D'Gross", "Fenrir", "aún se presta",
                "Licencia GPL-3.0", "SIL OFL 1.1", "Lo que hace y lo que no hace Olympian Planet Coords",
                "no destruirá tus saves", "Divulgación sobre el uso de IA", "sin relación con Hello Games",
