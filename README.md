@@ -7,6 +7,12 @@ Type a latitude and longitude, get a HUD marker and a 3D arrow that guides you t
 
 <p align="center"><a href="README.es.md">Leer en español</a> · <a href="INSTRUCTIONS.md">Instructions</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
+## See it in action
+
+<p align="center"><img src="docs/guide/olympian-planet-coords-guide-en.gif" width="854" alt="Animated guide: live coordinates, F9, typing a destination, HUD marker, 3D arrow, arrival and the right-click menu"></p>
+
+<p align="center"><sub>Real overlay and real mod logic; the landscape and the HUD marker are illustrations.</sub></p>
+
 ## What it does (v0.1.0-beta)
 
 - **Live coordinates** in the top-left corner: on foot, in a ship, in a vehicle and in orbit.

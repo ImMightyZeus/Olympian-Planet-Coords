@@ -7,6 +7,12 @@ Escribe una latitud y una longitud, y obtienes un marcador en el HUD y una flech
 
 <p align="center"><a href="README.md">Read in English</a> · <a href="INSTRUCCIONES.md">Instrucciones</a> · <a href="CHANGELOG.md">Registro de cambios</a></p>
 
+## Míralo en acción
+
+<p align="center"><img src="docs/guide/olympian-planet-coords-guide-es.gif" width="854" alt="Guía animada: coordenadas en vivo, F9, escribir un destino, marcador en el HUD, flecha 3D, llegada y el menú del clic derecho"></p>
+
+<p align="center"><sub>Recuadro y lógica del mod reales; el paisaje y el marcador del HUD son ilustraciones.</sub></p>
+
 ## Qué hace (v0.1.0-beta)
 
 - **Coordenadas en vivo** arriba a la izquierda: a pie, en nave, en vehículo y en órbita.
