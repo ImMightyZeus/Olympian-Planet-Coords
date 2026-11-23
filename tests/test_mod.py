@@ -163,7 +163,8 @@ def test_pymhf_detecta_hooks_gui_y_endpoints():
     assert len(m._hotkey_funcs) == 1
     assert [f._hotkey for f in m._hotkey_funcs] == [mod.HOTKEY_INPUT]
     assert sorted(f._api_endpoint.route for f in m._http_endpoints["GET"]) == ["/coords", "/debug"]
-    assert sorted(f._api_endpoint.route for f in m._http_endpoints["PUT"]) == ["/clear", "/forget", "/hotkey", "/lang", "/marker"]
+    put_routes = sorted(f._api_endpoint.route for f in m._http_endpoints["PUT"])
+    assert put_routes == ["/clear", "/forget", "/hotkey", "/lang", "/marker"], put_routes
     labels = [getattr(getattr(w, "_widget_data", w), "label", None) for w in m._gui_widgets]
     for needed in ["Coordenadas", "Destino", "Ir a (lat, lon)", "Poner destino", "Quitar destino",
                    "Marcador", "Flecha inv.", "Tecla (Reload Mod)", "Idioma (Reload Mod)", "Creditos"]:
@@ -377,7 +378,8 @@ def test_cruz_de_la_lista_quita_del_historial_y_del_destino():
     tick(m)
     m.http_forget(5, 5)
     tick(m)
-    assert m.http_coords["history"] == [] and m.http_coords["last_result"]["message"] == "Quitado de la lista: +5.00, +5.00"
+    assert m.http_coords["history"] == []
+    assert m.http_coords["last_result"]["message"] == "Quitado de la lista: +5.00, +5.00"
     assert any(d.get("name") == "C" for d in m.data["destinations"].values())
     GAME.set_location(EnvironmentLocation.Enum.PlanetOnFoot)
 
@@ -623,6 +625,36 @@ def test_argumentos_convertibles_por_ctypes():
             t.from_param(a)
         seen.add(name)
     assert seen == set(lookup), seen
+
+
+def test_idioma_ruso():
+    """Ruso: mensajes, puntos cardinales y /lang; la ventana de NMS.py sigue en ingles (sin cirilico)."""
+    assert mod.LANGS == ("es", "en", "ru")
+    assert [mod.cardinal(b, "ru") for b in range(0, 360, 45)] == ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
+    for key, entry in mod.MESSAGES.items():
+        assert entry.get("ru"), key
+        # mismos campos {..} que en espanol
+        import string
+        fields = lambda t: sorted(f for _, f, _, _ in string.Formatter().parse(t) if f)  # noqa: E731
+        assert fields(entry["ru"]) == fields(entry["es"]), key
+    assert mod.normalize_lang("RU") == "ru" and mod.normalize_lang("fr") in ("es", "en", "ru")
+    old = mod.GUI_LANG
+    try:
+        mod.GUI_LANG = "ru"
+        assert mod.gui_label("coords") == "Coordinates"
+    finally:
+        mod.GUI_LANG = old
+    m = make_mod()
+    assert m.http_lang("ru") == {"saved": True, "lang": "ru", "gui_lang": mod.GUI_LANG}
+    assert m.lang == "ru" and int(m.gui_lang) == int(mod.LangChoice.Russian)
+    at(10.0, 0.0)
+    tick(m)
+    m.http_marker(10.0, 10.0, "Башня")
+    tick(m)
+    s = m.http_coords
+    assert s["lang"] == "ru" and s["destination"]["cardinal"] == "В", s
+    assert s["last_result"]["message"] == "Цель: +10.00, +10.00 Башня", s["last_result"]
+    m.http_lang("es")
 
 
 def test_idioma_ingles():

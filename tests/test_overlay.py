@@ -268,7 +268,7 @@ assert pushed == ["en"], pushed
 assert o.now_row.tag.cget("text") == "NOW" and o.dest_row.tag.cget("text") == "DEST"
 assert o.status.cget("text").startswith("click to go to coordinates"), o.status.cget("text")
 labels = [o.menu.entrycget(i, "label") for i in range(o.menu.index("end") + 1) if o.menu.type(i) != "separator"]
-assert labels == ["Size", "Key", "Idioma / Language", "Clear this planet's destination", "About…",
+assert labels == ["Size", "Key", "Idioma / Language / Язык", "Clear this planet's destination", "About…",
                   "Move to the top-left corner", "Exit"], labels
 o._on_coords(dict(base, destination=dest, in_orbit=True, lang="en"))
 assert o.dest_info.cget("text") == "1.8 km away · bearing 57° NE", o.dest_info.cget("text")
@@ -291,6 +291,23 @@ for needed in ("Developed by MightyZeus", "License GPL-3.0", "Acknowledgements:"
                "What Olympian Planet Coords does and doesn't do", "AI Disclosure", "not affiliated with Hello Games",
                "Other MightyZeus projects"):
     assert needed in texts, needed
+about.destroy()
+# Ruso: interfaz traducida; los textos aprobados del estandar 1.3 se muestran en ingles.
+assert ov.LANGS == ("es", "en", "ru") and set(ov.STRINGS["ru"]) == set(ov.STRINGS["en"])
+for k in ("thanks", "a_stance", "a_stance_intro", "a_ai"):
+    assert ov.STRINGS["ru"][k] == ov.STRINGS["en"][k], k
+assert ov.text_family("ru", {"Consolas", "Share Tech Mono"}) == "Consolas"
+assert ov.text_family("es", {"Consolas", "Share Tech Mono"}) == "Share Tech Mono"
+assert ov.text_family("ru", {"Share Tech Mono"}) == "Share Tech Mono"
+o._families = o._families | {"Consolas"}
+o.set_lang("ru")
+time.sleep(0.2)
+assert pushed[-1] == "ru" and o.now_row.tag.cget("text") == "СЕЙЧАС"
+assert o.fonts["text"].cget("family") == "Consolas", o.fonts["text"].cget("family")
+labels = [o.menu.entrycget(i, "label") for i in range(o.menu.index("end") + 1) if o.menu.type(i) != "separator"]
+assert "Размер" in labels and "Idioma / Language / Язык" in labels, labels
+o.set_lang("es")
+assert o.fonts["text"].cget("family") != "Consolas" or "Share Tech Mono" not in o._families
 o.root.destroy()
 print("OK overlay")
 sys.exit(0)

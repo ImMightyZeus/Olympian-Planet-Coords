@@ -83,8 +83,8 @@ static olympian::GameView ViewFrom(const Json& f) {
     return v;
 }
 
-static int RunCore(const std::string& path) {
-    olympian::Core core(path, "es");
+static int RunCore(const std::string& path, const std::string& system_lang = "es") {
+    olympian::Core core(path, system_lang);
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line.empty()) continue;
@@ -208,7 +208,7 @@ static int RunFakeGame(const std::string& path, int port) {
 int main(int argc, char** argv) {
     std::string mode = argc > 1 ? argv[1] : "";
     if (mode == "geo") return RunGeo();
-    if (mode == "core" && argc > 2) return RunCore(argv[2]);
+    if (mode == "core" && argc > 2) return RunCore(argv[2], argc > 3 ? argv[3] : "es");
     if (mode == "serve" && argc > 3) return RunServe(argv[2], std::atoi(argv[3]));
 #ifdef _WIN32
     if (mode == "fakegame" && argc > 3) return RunFakeGame(argv[2], std::atoi(argv[3]));

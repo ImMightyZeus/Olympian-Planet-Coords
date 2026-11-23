@@ -95,9 +95,10 @@ HOTKEY_CHOICES = ("f5", "f6", "f7", "f8", "f9", "f10", "f11", "ninguna")
 HOTKEY_DEFAULT = "f9"
 
 # --------------------------------------------------------------------------------------------
-# Idiomas (espanol / ingles)
+# Idiomas (espanol / ingles / ruso)
 # --------------------------------------------------------------------------------------------
-LANGS = ("es", "en")
+LANGS = ("es", "en", "ru")
+_LANG_IDS = {0x0A: "es", 0x19: "ru"}  # idioma principal de Windows (LANGID & 0x3FF); cualquier otro: ingles
 
 
 def system_lang() -> str:
@@ -108,38 +109,119 @@ def system_lang() -> str:
     try:
         if sys.platform == "win32":
             lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
-            return "es" if (lid & 0x3FF) == 0x0A else "en"
-        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
-        return "es" if loc.startswith("es") else "en"
+            return _LANG_IDS.get(lid & 0x3FF, "en")
+        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()[:2]
+        return loc if loc in LANGS else "en"
     except Exception:
         return "es"
 
 
 MESSAGES = {
-    "waiting": {"es": "esperando al juego", "en": "waiting for the game"},
-    "not_on_planet": {"es": "no estas en un planeta", "en": "you're not on a planet"},
-    "arrived": {"es": "Llegaste a {name}", "en": "You reached {name}"},
-    "dest_set": {"es": "Destino: {coords}", "en": "Destination: {coords}"},
-    "dest_cleared": {"es": "Destino quitado", "en": "Destination cleared"},
-    "no_dest_here": {"es": "no hay destino en este planeta", "en": "no destination on this planet"},
-    "history_removed": {"es": "Quitado de la lista: {coords}", "en": "Removed from the list: {coords}"},
-    "history_removed_dest": {"es": "Quitado de la lista y como destino: {coords}",
-                             "en": "Removed from the list and as destination: {coords}"},
-    "not_in_history": {"es": "ese punto no esta en la lista", "en": "that point is not in the list"},
-    "marker_error": {"es": "error al crear el marcador: {err}", "en": "could not create the marker: {err}"},
-    "marker_rejected": {"es": "el juego rechazo el marcador; prueba el otro metodo",
-                        "en": "the game rejected the marker; try the other method"},
-    "error": {"es": "error: {err}", "en": "error: {err}"},
-    "invalid_input": {"es": "Entrada invalida: {err}", "en": "Invalid input: {err}"},
-    "out_of_range": {"es": "coordenadas fuera de rango", "en": "coordinates out of range"},
-    "bad_hotkey": {"es": "tecla no valida", "en": "invalid key"},
-    "bad_lang": {"es": "idioma no valido", "en": "invalid language"},
-    "no_destination": {"es": "sin destino", "en": "no destination"},
-    "marker_label": {"es": "Destino", "en": "Destination"},
-    "parse_format": {"es": "formato: usa  +12.34, -56.78  (o 12,34; -56,78)",
-                     "en": "format: use  +12.34, -56.78  (or 12,34; -56,78)"},
-    "parse_lat": {"es": "latitud fuera de rango (-90..90)", "en": "latitude out of range (-90..90)"},
-    "parse_lon": {"es": "longitud fuera de rango (-180..180)", "en": "longitude out of range (-180..180)"},
+    "waiting": {
+        "es": "esperando al juego",
+        "en": "waiting for the game",
+        "ru": "ожидание игры",
+    },
+    "not_on_planet": {
+        "es": "no estas en un planeta",
+        "en": "you're not on a planet",
+        "ru": "вы не на планете",
+    },
+    "arrived": {
+        "es": "Llegaste a {name}",
+        "en": "You reached {name}",
+        "ru": "Вы прибыли: {name}",
+    },
+    "dest_set": {
+        "es": "Destino: {coords}",
+        "en": "Destination: {coords}",
+        "ru": "Цель: {coords}",
+    },
+    "dest_cleared": {
+        "es": "Destino quitado",
+        "en": "Destination cleared",
+        "ru": "Цель удалена",
+    },
+    "no_dest_here": {
+        "es": "no hay destino en este planeta",
+        "en": "no destination on this planet",
+        "ru": "на этой планете нет цели",
+    },
+    "history_removed": {
+        "es": "Quitado de la lista: {coords}",
+        "en": "Removed from the list: {coords}",
+        "ru": "Удалено из списка: {coords}",
+    },
+    "history_removed_dest": {
+        "es": "Quitado de la lista y como destino: {coords}",
+        "en": "Removed from the list and as destination: {coords}",
+        "ru": "Удалено из списка и снято как цель: {coords}",
+    },
+    "not_in_history": {
+        "es": "ese punto no esta en la lista",
+        "en": "that point is not in the list",
+        "ru": "этой точки нет в списке",
+    },
+    "marker_error": {
+        "es": "error al crear el marcador: {err}",
+        "en": "could not create the marker: {err}",
+        "ru": "не удалось создать метку: {err}",
+    },
+    "marker_rejected": {
+        "es": "el juego rechazo el marcador; prueba el otro metodo",
+        "en": "the game rejected the marker; try the other method",
+        "ru": "игра отклонила метку; попробуйте другой метод",
+    },
+    "error": {
+        "es": "error: {err}",
+        "en": "error: {err}",
+        "ru": "ошибка: {err}",
+    },
+    "invalid_input": {
+        "es": "Entrada invalida: {err}",
+        "en": "Invalid input: {err}",
+        "ru": "Неверный ввод: {err}",
+    },
+    "out_of_range": {
+        "es": "coordenadas fuera de rango",
+        "en": "coordinates out of range",
+        "ru": "координаты вне диапазона",
+    },
+    "bad_hotkey": {
+        "es": "tecla no valida",
+        "en": "invalid key",
+        "ru": "недопустимая клавиша",
+    },
+    "bad_lang": {
+        "es": "idioma no valido",
+        "en": "invalid language",
+        "ru": "недопустимый язык",
+    },
+    "no_destination": {
+        "es": "sin destino",
+        "en": "no destination",
+        "ru": "нет цели",
+    },
+    "marker_label": {
+        "es": "Destino",
+        "en": "Destination",
+        "ru": "Цель",
+    },
+    "parse_format": {
+        "es": "formato: usa  +12.34, -56.78  (o 12,34; -56,78)",
+        "en": "format: use  +12.34, -56.78  (or 12,34; -56,78)",
+        "ru": "формат:  +12.34, -56.78  (или 12,34; -56,78)",
+    },
+    "parse_lat": {
+        "es": "latitud fuera de rango (-90..90)",
+        "en": "latitude out of range (-90..90)",
+        "ru": "широта вне диапазона (-90..90)",
+    },
+    "parse_lon": {
+        "es": "longitud fuera de rango (-180..180)",
+        "en": "longitude out of range (-180..180)",
+        "ru": "долгота вне диапазона (-180..180)",
+    },
 }
 
 
@@ -268,10 +350,11 @@ _CARDINALS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
 
 
 _CARDINALS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+_CARDINALS_RU = ("С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ")
 
 
 def cardinal(bearing: float, lang: str = "es") -> str:
-    names = _CARDINALS_EN if lang == "en" else _CARDINALS
+    names = {"en": _CARDINALS_EN, "ru": _CARDINALS_RU}.get(lang, _CARDINALS)
     return names[int(((bearing % 360) + 22.5) // 45) % 8]
 
 
@@ -415,12 +498,14 @@ _GUI_LABELS = {
 
 
 def gui_label(key: str) -> str:
-    return _GUI_LABELS[key][GUI_LANG]
+    # La ventana de NMS.py (DearPyGui) no trae letras cirilicas: en ruso usa las etiquetas en ingles.
+    return _GUI_LABELS[key].get(GUI_LANG, _GUI_LABELS[key]["en"])
 
 
 class LangChoice(IntEnum):
     Espanol = 0
     English = 1
+    Russian = 2
 
 
 class HotkeyChoice(IntEnum):

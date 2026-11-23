@@ -21,23 +21,35 @@ namespace olympian {
 
 namespace {
 
-const std::map<std::string, std::pair<const char*, const char*>> kMessages = {
-    {"waiting", {"esperando al juego", "waiting for the game"}},
-    {"not_on_planet", {"no estas en un planeta", "you're not on a planet"}},
-    {"arrived", {"Llegaste a {name}", "You reached {name}"}},
-    {"bad_lang", {"idioma no valido", "invalid language"}},
-    {"dest_set", {"Destino: {coords}", "Destination: {coords}"}},
-    {"dest_cleared", {"Destino quitado", "Destination cleared"}},
-    {"no_dest_here", {"no hay destino en este planeta", "no destination on this planet"}},
-    {"history_removed", {"Quitado de la lista: {coords}", "Removed from the list: {coords}"}},
-    {"history_removed_dest",
-     {"Quitado de la lista y como destino: {coords}", "Removed from the list and as destination: {coords}"}},
-    {"not_in_history", {"ese punto no esta en la lista", "that point is not in the list"}},
-    {"out_of_range", {"coordenadas fuera de rango", "coordinates out of range"}},
-    {"bad_hotkey", {"tecla no valida", "invalid key"}},
-    {"marker_label", {"Destino", "Destination"}},
-    {"error", {"error: {err}", "error: {err}"}},
+struct Msg {
+    const char* es;
+    const char* en;
+    const char* ru;
 };
+
+// Mismos textos que MESSAGES de la version Python (es / en / ru).
+const std::map<std::string, Msg> kMessages = {
+    {"waiting", {"esperando al juego", "waiting for the game", "ожидание игры"}},
+    {"not_on_planet", {"no estas en un planeta", "you're not on a planet", "вы не на планете"}},
+    {"arrived", {"Llegaste a {name}", "You reached {name}", "Вы прибыли: {name}"}},
+    {"bad_lang", {"idioma no valido", "invalid language", "недопустимый язык"}},
+    {"dest_set", {"Destino: {coords}", "Destination: {coords}", "Цель: {coords}"}},
+    {"dest_cleared", {"Destino quitado", "Destination cleared", "Цель удалена"}},
+    {"no_dest_here", {"no hay destino en este planeta", "no destination on this planet", "на этой планете нет цели"}},
+    {"history_removed", {"Quitado de la lista: {coords}", "Removed from the list: {coords}", "Удалено из списка: {coords}"}},
+    {"history_removed_dest", {"Quitado de la lista y como destino: {coords}", "Removed from the list and as destination: {coords}", "Удалено из списка и снято как цель: {coords}"}},
+    {"not_in_history", {"ese punto no esta en la lista", "that point is not in the list", "этой точки нет в списке"}},
+    {"out_of_range", {"coordenadas fuera de rango", "coordinates out of range", "координаты вне диапазона"}},
+    {"bad_hotkey", {"tecla no valida", "invalid key", "недопустимая клавиша"}},
+    {"marker_label", {"Destino", "Destination", "Цель"}},
+    {"error", {"error: {err}", "error: {err}", "ошибка: {err}"}},
+};
+
+}  // namespace
+
+bool IsLang(const std::string& code) { return code == "es" || code == "en" || code == "ru"; }
+
+namespace {
 
 bool IsPlanetLocation(int loc) {
     // PlanetOnFoot, PlanetInShip, PlanetInVehicle, Underwater, Cave, IndoorInBase
@@ -139,11 +151,13 @@ std::string Utf8TruncateChars(const std::string& s, size_t max_chars) {
 std::string Tr(const std::string& key, const std::string& lang) {
     auto it = kMessages.find(key);
     if (it == kMessages.end()) return key;
-    return lang == "en" ? it->second.second : it->second.first;
+    if (lang == "en") return it->second.en;
+    if (lang == "ru") return it->second.ru;
+    return it->second.es;
 }
 
 Core::Core(std::string data_path, std::string system_lang)
-    : data_path_(std::move(data_path)), system_lang_(system_lang == "en" ? "en" : "es") {
+    : data_path_(std::move(data_path)), system_lang_(IsLang(system_lang) ? system_lang : "en") {
     last_result_ = Json{{"ok", nullptr}, {"message", ""}, {"seq", 0}};
     Load();
     UpdateHotkeyLocked();
@@ -229,7 +243,7 @@ std::string Core::LangLocked() const {
     const Json& s = data_["settings"];
     if (s.contains("lang") && s["lang"].is_string()) {
         std::string l = s["lang"].get<std::string>().substr(0, 2);
-        if (l == "es" || l == "en") return l;
+        if (IsLang(l)) return l;
     }
     return system_lang_;
 }
@@ -474,7 +488,7 @@ std::string Core::Put(const std::string& route, const Json& query) {
     if (route == "lang") {
         std::string c = query.value("code", "");
         for (auto& ch : c) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-        if (c == "es" || c == "en") {
+        if (IsLang(c)) {
             data_["settings"]["lang"] = c;
             Save();
             r = Json{{"saved", true}, {"lang", c}, {"gui_lang", c}};

@@ -24,7 +24,7 @@ Mod para No Man's Sky (PC, Steam, Windows):
 4. Al llegar (50 m o menos) el destino se quita solo; la flecha se convierte en una esfera y se reduce.
 5. **Un destino por planeta**, recordado aunque te vayas; solo aparece en ese planeta.
 6. **Historial** de los últimos 10 destinos (flechas ↑ ↓ en el campo de texto).
-7. **Tamaño** Normal / Grande, **tecla** configurable e **idioma** español / inglés (clic derecho en el recuadro).
+7. **Tamaño** Normal / Grande, **tecla** configurable e **idioma** español / inglés / ruso (clic derecho en el recuadro).
 
 ## Novedades de la v0.1.0-beta
 
@@ -64,7 +64,7 @@ SHA256SUMS.txt                     ← huellas para comprobar los archivos
 ## Uso
 
 - Formatos: `+12.34, -56.78` · `12.34 -56.78 Mi base` · `12,34; -56,78; Mi base` (coma decimal → `;`).
-- **Esc** cancela. **Clic derecho**: Tamaño, Tecla, Idioma / Language, Quitar destino de este planeta, Acerca de, Mover, Salir.
+- **Esc** cancela. **Clic derecho**: Tamaño, Tecla, Idioma / Language / Язык, Quitar destino de este planeta, Acerca de, Mover, Salir.
 - **Tecla:** F9 por defecto (F8 la usa Imperial Galactic Map). Se puede elegir F5 a F11, o "Ninguna (solo clic)". Solo responde con el juego en primer plano.
 - **En laptops:** si al pulsar F9 se abre otra cosa (el navegador, el brillo, el volumen…), es la función especial de esa tecla en tu teclado. Usa **Fn + F9**, activa el bloqueo de Fn de tu laptop o elige otra tecla en el menú.
 - El rumbo es respecto al norte del planeta. La flecha es respecto al frente de tu nave (o de tu personaje a pie).

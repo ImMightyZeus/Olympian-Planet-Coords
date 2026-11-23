@@ -11,7 +11,7 @@ Fenrir, porque aunque ya casi no juega, aún se presta a conversar sobre mis ave
 
 Software libre bajo la GNU General Public License v3 (archivo LICENSE). Proyecto hecho por fans, sin
 relacion con Hello Games. Se desarrolla con la ayuda de una IA (Claude); la direccion del proyecto y
-las pruebas en el juego real son trabajo humano. Textos en espanol e ingles (menu "Idioma / Language").
+las pruebas en el juego real son trabajo humano. Textos en espanol, ingles y ruso (menu "Idioma / Language / Язык").
 
 Ventana pequena, sin bordes y siempre encima del juego que:
   * muestra la latitud/longitud actual (AHORA) y, si hay destino en este planeta, el DESTINO
@@ -59,8 +59,10 @@ CREDITS = {
     "paypal": "https://paypal.me/ImMightyZeus",
     "license": "GPL-3.0",
 }
-# --- Textos (estandar MightyZeus 1.3, espanol / ingles) --------------------------------------
-LANGS = ("es", "en")
+# --- Textos (estandar MightyZeus 1.3, espanol / ingles; ruso para la interfaz) ---------------
+LANGS = ("es", "en", "ru")
+LANG_NAMES = {"es": "Español", "en": "English", "ru": "Русский"}
+_LANG_IDS = {0x0A: "es", 0x19: "ru"}  # idioma principal de Windows (LANGID & 0x3FF); cualquier otro: ingles
 APP_TITLE = "OLYMPIAN PLANET COORDS"
 OTHER_PROJECTS = [
     ("Olympian NMS Save Editor", "https://github.com/ImMightyZeus/Olympian-NMS-Save-Editor"),
@@ -173,6 +175,32 @@ STRINGS = {
     },
 }
 
+# Ruso: toda la interfaz. Los textos del estandar MightyZeus 1.3 (agradecimientos, postura sobre los
+# mods y divulgacion de IA) solo estan aprobados en espanol e ingles: en ruso se muestran en ingles.
+STRINGS["ru"] = {
+    **STRINGS["en"],
+    "tag_now": "СЕЙЧАС", "tag_dest": "ЦЕЛЬ", "orbit": "ОРБИТА",
+    "waiting_mod": "Ожидание мода (игра запущена?)…", "off_planet": "Не на планете",
+    "dest_info": "{dist} · курс {bearing}° {cardinal}",
+    "hint_idle": "нажмите, чтобы ввести координаты", "hint_edit": "Enter · Esc · стрелки: история",
+    "hist_empty": "история пуста", "hist_pos": "история {i}/{n}",
+    "sending": "Отправка {coords}…", "no_contact": "Не удалось связаться с модом: {err}",
+    "rejected": "Мод отклонил запрос", "hotkey_fail": "Не удалось сохранить клавишу",
+    "hotkey_pending": "Клавиша {key} сохранена · заработает после Reload Mod в NMS.py",
+    "hotkey_active": "Клавиша {key} активна", "none": "Нет",
+    "parse_format": "формат:  +12.34, -56.78  (или 12,34; -56,78)",
+    "parse_lat": "широта вне диапазона (-90..90)", "parse_lon": "долгота вне диапазона (-180..180)",
+    "m_size": "Размер", "m_normal": "Обычный", "m_large": "Крупный", "m_key": "Клавиша",
+    "m_none_click": "Нет (только щелчок)", "m_clear": "Удалить цель на этой планете",
+    "m_about": "О программе…", "m_move": "Переместить в левый верхний угол", "m_exit": "Выход",
+    "a_title": "О программе Olympian Planet Coords", "a_dev": "Разработчик: MightyZeus, родом из Никарагуа",
+    "a_support": "Поддержать проект", "a_repo": "Репозиторий", "a_license": "Лицензия",
+    "a_disclaimer": "Фанатский проект, не связан с Hello Games.",
+    "a_others": "Другие проекты MightyZeus для No Man's Sky:", "a_all": "Все проекты",
+    "a_fonts": "Шрифты: DSEG7 Classic (keshikan) и Share Tech Mono (Carrois), SIL OFL 1.1; кириллица: Consolas",
+    "a_close": "Закрыть",
+}
+
 
 def system_lang() -> str:
     """OLYMPIAN_LANG si existe; si no, el idioma de Windows; si no, el locale."""
@@ -184,11 +212,11 @@ def system_lang() -> str:
             import ctypes
 
             lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
-            return "es" if (lid & 0x3FF) == 0x0A else "en"
+            return _LANG_IDS.get(lid & 0x3FF, "en")
         import locale
 
-        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
-        return "es" if loc.startswith("es") else "en"
+        loc = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()[:2]
+        return loc if loc in LANGS else "en"
     except Exception:
         return "es"
 
@@ -205,6 +233,14 @@ FONT_FILES = [os.path.join(HERE, "fonts", "DSEG7Classic-Bold.ttf"),
               os.path.join(HERE, "fonts", "ShareTechMono-Regular.ttf")]
 NUM_FAMILY = "DSEG7 Classic"
 TEXT_FAMILY = "Share Tech Mono"
+CYRILLIC_FAMILY = "Consolas"  # Share Tech Mono no trae letras cirilicas; Consolas viene con Windows
+
+
+def text_family(lang: str, families) -> str:
+    """Fuente del texto segun el idioma (en ruso, una con cirilico)."""
+    if lang == "ru" and CYRILLIC_FAMILY in families:
+        return CYRILLIC_FAMILY
+    return TEXT_FAMILY if TEXT_FAMILY in families else "Consolas"
 
 # --- Parser (identico al del mod; una prueba verifica que coinciden) -------------------------
 _NUM = r"([+-]?\d+(?:\.\d+)?)"
@@ -683,7 +719,8 @@ class Overlay:
 
         fams = set(tkfont.families(self.root))
         num_fam = NUM_FAMILY if NUM_FAMILY in fams else "Consolas"
-        txt_fam = TEXT_FAMILY if TEXT_FAMILY in fams else "Consolas"
+        self._families = fams
+        txt_fam = text_family(self.lang, fams)
         self.fonts_ok = NUM_FAMILY in fams and TEXT_FAMILY in fams
         sizes = FONT_SIZES[self.settings["size"]]
         self.fonts = {
@@ -774,11 +811,10 @@ class Overlay:
                                      value=key, variable=self.hotkey_var, command=lambda k=key: self.set_hotkey(k))
         self.menu.add_cascade(label=self.tr("m_key"), menu=key_menu)
         lang_menu = tk.Menu(self.menu, tearoff=0)
-        lang_menu.add_radiobutton(label="Español", value="es", variable=self.lang_var,
-                                  command=lambda: self.set_lang("es"))
-        lang_menu.add_radiobutton(label="English", value="en", variable=self.lang_var,
-                                  command=lambda: self.set_lang("en"))
-        self.menu.add_cascade(label="Idioma / Language", menu=lang_menu)
+        for code in LANGS:
+            lang_menu.add_radiobutton(label=LANG_NAMES[code], value=code, variable=self.lang_var,
+                                      command=lambda c=code: self.set_lang(c))
+        self.menu.add_cascade(label="Idioma / Language / Язык", menu=lang_menu)
         self.menu.add_command(label=self.tr("m_clear"), command=self.clear_marker)
         self.menu.add_command(label=self.tr("m_about"), command=self.show_about)
         self.menu.add_command(label=self.tr("m_move"), command=lambda: self.move_to(12, 12))
@@ -790,6 +826,9 @@ class Overlay:
             return
         self.lang = code
         self.lang_var.set(code)
+        fam = text_family(code, self._families)
+        for k in ("text", "small", "entry"):
+            self.fonts[k].configure(family=fam)
         self.settings["lang"] = code
         save_settings(self.settings_file, self.settings)
         self.now_row.tag.configure(text=self.tr("tag_now"))

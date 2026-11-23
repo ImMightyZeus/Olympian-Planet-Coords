@@ -86,10 +86,12 @@ inline double InitialBearing(double lat1, double lon1, double lat2, double lon2)
 inline std::string Cardinal(double bearing, const std::string& lang) {
     static const char* es[8] = {"N", "NE", "E", "SE", "S", "SO", "O", "NO"};
     static const char* en[8] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+    static const char* ru[8] = {"\xD0\xA1", "\xD0\xA1\xD0\x92", "\xD0\x92", "\xD0\xAE\xD0\x92",
+                                "\xD0\xAE", "\xD0\xAE\xD0\x97", "\xD0\x97", "\xD0\xA1\xD0\x97"};  // С СВ В ЮВ Ю ЮЗ З СЗ
     double b = std::fmod(bearing, 360.0);
     if (b < 0) b += 360.0;
     int i = static_cast<int>(std::floor((b + 22.5) / 45.0)) % 8;
-    return (lang == "en" ? en : es)[i];
+    return (lang == "en" ? en : lang == "ru" ? ru : es)[i];
 }
 
 // Giro (yaw) e inclinacion (pitch) en grados del objetivo visto desde origin con la base

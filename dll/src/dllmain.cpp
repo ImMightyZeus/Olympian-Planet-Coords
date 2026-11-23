@@ -204,7 +204,11 @@ void FocusGame() {
 }
 
 std::string SystemLang() {
-    return (GetUserDefaultUILanguage() & 0x3FF) == 0x0A ? "es" : "en";
+    switch (GetUserDefaultUILanguage() & 0x3FF) {  // idioma principal de Windows
+        case 0x0A: return "es";
+        case 0x19: return "ru";
+        default: return "en";
+    }
 }
 
 // cTkFSM::StateChange: anota el objeto (cGcApplication es un cTkFSM). No cambia nada del juego.
@@ -384,13 +388,16 @@ std::wstring BoxText() {
     if (!c || !c->InGameBox()) return L"";
     olympian::Json s = olympian::Json::parse(c->CoordsJson(), nullptr, false);
     if (s.is_discarded()) return L"";
-    const bool es = c->Lang() == "es";
+    const std::string lang = c->Lang();
     std::string l2, l3;
     char buf[160];
     if (s.contains("lat") && s["lat"].is_number() && s.contains("lon") && s["lon"].is_number()) {
         snprintf(buf, sizeof(buf), "%+.2f, %+.2f", s["lat"].get<double>(), s["lon"].get<double>());
         l2 = buf;
-        if (s.value("in_orbit", false)) l2 += es ? " \xC2\xB7 en \xC3\xB3rbita" : " \xC2\xB7 in orbit";
+        if (s.value("in_orbit", false))
+            l2 += lang == "es"   ? " \xC2\xB7 en \xC3\xB3rbita"
+                  : lang == "ru" ? " \xC2\xB7 \xD0\xBD\xD0\xB0 \xD0\xBE\xD1\x80\xD0\xB1\xD0\xB8\xD1\x82\xD0\xB5"  // на орбите
+                                 : " \xC2\xB7 in orbit";
     } else {
         l2 = s.contains("reason") && s["reason"].is_string() ? s["reason"].get<std::string>() : "";
     }

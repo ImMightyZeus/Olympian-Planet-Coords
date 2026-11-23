@@ -24,7 +24,7 @@ Mod for No Man's Sky (PC, Steam, Windows):
 4. On arrival (50 m or less) the destination clears itself; the arrow turns into a sphere and shrinks.
 5. **One destination per planet**, remembered even if you leave; it only shows up on that planet.
 6. **History** of the last 10 destinations (↑ ↓ arrows in the text field).
-7. **Size** Normal / Large, configurable **hotkey** and **language** English / Spanish (right-click the box).
+7. **Size** Normal / Large, configurable **hotkey** and **language** English / Spanish / Russian (right-click the box).
 
 ## What's new in v0.1.0-beta
 
@@ -64,7 +64,7 @@ SHA256SUMS.txt                     ← hashes to check the files
 ## Usage
 
 - Formats: `+12.34, -56.78` · `12.34 -56.78 My base` · `12,34; -56,78; My base` (decimal comma → `;`).
-- **Esc** cancels. **Right-click**: Size, Key, Idioma / Language, Clear this planet's destination, About, Move, Exit (shown in the chosen language).
+- **Esc** cancels. **Right-click**: Size, Key, Idioma / Language / Язык, Clear this planet's destination, About, Move, Exit (shown in the chosen language).
 - **Hotkey:** F9 by default (F8 is used by Imperial Galactic Map). You can pick F5 to F11, or "None (click only)". It only responds while the game is in the foreground.
 - **On laptops:** if pressing F9 opens something else (the browser, brightness, volume…), that is the key's special function on your keyboard. Use **Fn + F9**, turn on your laptop's Fn lock, or pick another key in the menu.
 - The bearing is relative to the planet's north. The arrow is relative to the front of your ship (or your character on foot).

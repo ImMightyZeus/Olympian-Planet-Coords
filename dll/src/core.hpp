@@ -42,6 +42,9 @@ struct MarkerSpec {
 };
 
 // Recorta texto UTF-8 a max_bytes sin partir un caracter.
+// Idiomas del mod: "es", "en" o "ru".
+bool IsLang(const std::string& code);
+
 std::string Utf8TruncateBytes(const std::string& s, size_t max_bytes);
 // Recorta texto UTF-8 a max_chars caracteres.
 std::string Utf8TruncateChars(const std::string& s, size_t max_chars);
@@ -65,7 +68,7 @@ std::string Tr(const std::string& key, const std::string& lang);
 
 class Core {
    public:
-    // data_path: ruta UTF-8 de datos.json. system_lang: "es" o "en" (idioma de Windows).
+    // data_path: ruta UTF-8 de datos.json. system_lang: "es", "en" o "ru" (idioma de Windows).
     Core(std::string data_path, std::string system_lang);
 
     // Llamar una vez por frame desde el hilo del juego. view == nullptr: no hay juego todavia.

@@ -396,6 +396,32 @@ def test_cruz_de_la_lista(exe):
     h.close()
 
 
+@test
+def test_idioma_ruso(exe):
+    """Ruso en el DLL: mismos mensajes y puntos cardinales que la version Python."""
+    path = os.path.join(tempfile.mkdtemp(), "datos.json")
+    h = Harness([exe, "core", path])
+    assert h.ask({"put": "lang", "query": {"code": "ru"}}) == {"saved": True, "lang": "ru", "gui_lang": "ru"}
+    s = h.ask(frame(12.0, -45.0, 0, location=2))
+    assert s["lang"] == "ru" and s["reason"] == py.tr("not_on_planet", "ru"), s
+    h.ask(frame(12.0, -45.0, 0.1))
+    h.ask({"put": "marker", "query": {"lat": "12", "lon": "-30", "name": "Башня"}})
+    s = h.ask(frame(12.0, -45.0, 0.2))
+    assert s["last_result"]["message"] == py.tr("dest_set", "ru", coords="+12.00, -30.00 Башня"), s
+    assert s["destination"]["cardinal"] == py.cardinal(s["destination"]["bearing"], "ru") == "В", s
+    r = h.ask({"put": "forget", "query": {"lat": "1", "lon": "1"}})
+    s = h.ask(frame(12.0, -45.0, 0.3))
+    assert s["last_result"]["message"] == py.tr("not_in_history", "ru"), s
+    r = h.ask({"put": "hotkey", "query": {"key": "x"}})
+    assert r == {"saved": False, "message": py.tr("bad_hotkey", "ru")}, r
+    h.close()
+    # idioma de Windows ruso por defecto
+    h = Harness([exe, "core", os.path.join(tempfile.mkdtemp(), "d.json"), "ru"])
+    s = h.ask({"none": True, "t": 0})
+    assert s["lang"] == "ru" and s["reason"] == py.tr("waiting", "ru"), s
+    h.close()
+
+
 def check_server_with_overlay_client(port):
     client = ov.ModClient("127.0.0.1", port)
     s = client.get_coords()
