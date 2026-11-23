@@ -230,6 +230,11 @@ std::string Core::LangLocked() const {
     return system_lang_;
 }
 
+bool Core::InGameBox() {
+    std::lock_guard<std::mutex> g(mu_);
+    return SettingBool("ingame_box", true);
+}
+
 std::string Core::Lang() {
     std::lock_guard<std::mutex> g(mu_);
     return LangLocked();

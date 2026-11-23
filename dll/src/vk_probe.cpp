@@ -1,5 +1,5 @@
-// Olympian Planet Coords (DLL) - sonda de Vulkan (solo diagnostico, no dibuja nada)
-// Olympian Planet Coords (DLL) - Vulkan probe (diagnostics only, draws nothing)
+// Olympian Planet Coords (DLL) - sonda de Vulkan y enganches para el recuadro dentro del juego
+// Olympian Planet Coords (DLL) - Vulkan probe and hooks for the in-game box
 //
 // Primer paso hacia el recuadro DENTRO del juego (sin .exe y sin modo Sin bordes): antes de dibujar,
 // hay que saber por donde pasa el juego para presentar cada imagen. Esta sonda engancha las funciones
@@ -30,6 +30,7 @@
 #include <vulkan/vulkan.h>
 
 #include "MinHook.h"
+#include "vk_overlay.hpp"
 
 namespace olympian {
 namespace {
@@ -47,6 +48,7 @@ PFN_vkGetPhysicalDeviceProperties p_get_props = nullptr;
 // Punteros reales que el juego pidio por vkGetDeviceProcAddr (los envolvemos para contarlos).
 PFN_vkCreateSwapchainKHR r_create_swapchain_dev = nullptr;
 PFN_vkQueuePresentKHR r_present_dev = nullptr;
+PFN_vkDestroySwapchainKHR r_destroy_swapchain_dev = nullptr;
 
 std::atomic<unsigned long long> g_present_export{0}, g_present_dev{0}, g_swapchains{0};
 std::atomic<bool> g_saw_instance{false}, g_saw_device{false};
@@ -124,12 +126,14 @@ VkResult VKAPI_CALL HkCreateDevice(VkPhysicalDevice pd, const VkDeviceCreateInfo
                   ci->pQueueCreateInfos[i].queueCount);
         g_log("[vk]   extensiones: %s", Join(ci->ppEnabledExtensionNames, ci->enabledExtensionCount).c_str());
     }
+    if (r == VK_SUCCESS && out && *out) OverlayOnDevice(pd, *out, ci, o_get_device_proc);
     return r;
 }
 
-void NoteSwapchain(const VkSwapchainCreateInfoKHR* ci, VkResult r, const char* path) {
+void NoteSwapchain(VkDevice d, const VkSwapchainCreateInfoKHR* ci, VkResult r, const char* path, VkSwapchainKHR* out) {
     ++g_swapchains;
     if (!ci) return;
+    if (r == VK_SUCCESS && out && *out) OverlayOnSwapchain(d, ci, *out);
     {
         std::lock_guard<std::mutex> g(g_mu);
         g_extent = ci->imageExtent;
@@ -149,14 +153,14 @@ void NoteSwapchain(const VkSwapchainCreateInfoKHR* ci, VkResult r, const char* p
 VkResult VKAPI_CALL HkCreateSwapchainExport(VkDevice d, const VkSwapchainCreateInfoKHR* ci,
                                             const VkAllocationCallbacks* a, VkSwapchainKHR* out) {
     VkResult r = o_create_swapchain_export(d, ci, a, out);
-    NoteSwapchain(ci, r, "exportacion");
+    NoteSwapchain(d, ci, r, "exportacion", out);
     return r;
 }
 
 VkResult VKAPI_CALL HkCreateSwapchainDev(VkDevice d, const VkSwapchainCreateInfoKHR* ci,
                                          const VkAllocationCallbacks* a, VkSwapchainKHR* out) {
     VkResult r = r_create_swapchain_dev(d, ci, a, out);
-    NoteSwapchain(ci, r, "GetDeviceProcAddr");
+    NoteSwapchain(d, ci, r, "GetDeviceProcAddr", out);
     return r;
 }
 
@@ -172,12 +176,17 @@ void NotePresent(VkQueue q, const VkPresentInfoKHR* pi, std::atomic<unsigned lon
 
 VkResult VKAPI_CALL HkPresentExport(VkQueue q, const VkPresentInfoKHR* pi) {
     NotePresent(q, pi, g_present_export);
-    return o_present_export(q, pi);
+    return OverlayPresent(q, pi, o_present_export);
 }
 
 VkResult VKAPI_CALL HkPresentDev(VkQueue q, const VkPresentInfoKHR* pi) {
     NotePresent(q, pi, g_present_dev);
-    return r_present_dev(q, pi);
+    return OverlayPresent(q, pi, r_present_dev);
+}
+
+void VKAPI_CALL HkDestroySwapchainDev(VkDevice d, VkSwapchainKHR sc, const VkAllocationCallbacks* a) {
+    OverlayOnDestroySwapchain(sc);
+    r_destroy_swapchain_dev(d, sc, a);
 }
 
 PFN_vkVoidFunction VKAPI_CALL HkGetDeviceProcAddr(VkDevice d, const char* name) {
@@ -196,6 +205,10 @@ PFN_vkVoidFunction VKAPI_CALL HkGetDeviceProcAddr(VkDevice d, const char* name) 
     if (std::strcmp(name, "vkCreateSwapchainKHR") == 0) {
         r_create_swapchain_dev = reinterpret_cast<PFN_vkCreateSwapchainKHR>(f);
         return reinterpret_cast<PFN_vkVoidFunction>(&HkCreateSwapchainDev);
+    }
+    if (std::strcmp(name, "vkDestroySwapchainKHR") == 0) {
+        r_destroy_swapchain_dev = reinterpret_cast<PFN_vkDestroySwapchainKHR>(f);
+        return reinterpret_cast<PFN_vkVoidFunction>(&HkDestroySwapchainDev);
     }
     if (std::strcmp(name, "vkQueuePresentKHR") == 0) {
         r_present_dev = reinterpret_cast<PFN_vkQueuePresentKHR>(f);
@@ -223,7 +236,7 @@ std::string Lower(std::string s) {
 
 }  // namespace
 
-bool VkProbeInstall(VkProbeLog log) {
+bool VkProbeInstall(VkProbeLog log, std::wstring (*text)()) {
     g_log = log;
     HMODULE vk = GetModuleHandleW(L"vulkan-1.dll");
     if (!vk) vk = LoadLibraryW(L"vulkan-1.dll");  // el juego lo importa: ya deberia estar cargado
@@ -241,6 +254,9 @@ bool VkProbeInstall(VkProbeLog log) {
     }
     p_get_props = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
         reinterpret_cast<void*>(GetProcAddress(vk, "vkGetPhysicalDeviceProperties")));
+    OverlaySetup(log, text,
+                 reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
+                     reinterpret_cast<void*>(GetProcAddress(vk, "vkGetPhysicalDeviceMemoryProperties"))));
     Hook(vk, "vkCreateInstance", reinterpret_cast<void*>(&HkCreateInstance), reinterpret_cast<void**>(&o_create_instance));
     Hook(vk, "vkCreateDevice", reinterpret_cast<void*>(&HkCreateDevice), reinterpret_cast<void**>(&o_create_device));
     Hook(vk, "vkGetDeviceProcAddr", reinterpret_cast<void*>(&HkGetDeviceProcAddr),

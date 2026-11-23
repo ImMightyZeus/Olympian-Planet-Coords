@@ -140,7 +140,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.1" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.2" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -460,6 +460,8 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         d = json.loads(urllib.request.urlopen("http://127.0.0.1:5000/OlympianPlanetCoords/debug", timeout=2).read())
         assert d["dll"]["functions_found"] == d["dll"]["functions_total"] == 9, d["dll"]
         assert d["dll"]["fsm_candidates"] == 2 and d["dll"]["frames_with_game"] > 0, d["dll"]
+        # recuadro dentro del juego: sin dispositivo de Vulkan (Wine sin GPU) no hace nada
+        assert d["overlay"]["device"] is False and d["overlay"]["drawn"] == 0 and d["overlay"]["broken"] is False, d
         # destino lejos del jugador simulado (no llega antes de terminar)
         client = ov.ModClient("127.0.0.1", 5000)
         assert client.place_marker(-20.0, 100.0, "Torre Ñ") == {"queued": True}
@@ -490,6 +492,21 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         if p.poll() is None:
             p.terminate()
             p.wait(timeout=10)
+
+
+@test
+def test_recuadro_en_el_juego_con_vulkan_simulado(exe):
+    """vk_overlay.cpp contra un Vulkan simulado: semaforos, copia, pixeles, BGRA y los casos sin tocar nada."""
+    if not (shutil.which("wine") and shutil.which("x86_64-w64-mingw32-g++")):
+        print("   (sin wine/mingw: se omite)")
+        return
+    wexe = os.path.join(BUILD, "overlay_harness.exe")
+    subprocess.run(["x86_64-w64-mingw32-g++", "-O2", "-std=c++17", "-Wall", "-Wextra", "-Ithird_party",
+                    "-Ithird_party/vulkan", "tests/overlay_harness.cpp", "src/vk_overlay.cpp", "-o", wexe,
+                    "-static", "-lgdi32"], cwd=DLL, check=True)
+    env = dict(os.environ, WINEDEBUG="-all")
+    r = subprocess.run(["wine", wexe], cwd=DLL, capture_output=True, text=True, env=env, timeout=120)
+    assert r.returncode == 0 and "TODO OK" in r.stdout, r.stdout + r.stderr
 
 
 if __name__ == "__main__":

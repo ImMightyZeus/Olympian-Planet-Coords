@@ -55,7 +55,7 @@ The underlying commitment doesn't change: building real solutions and tools from
 
 [GNU General Public License v3.0](LICENSE). Third-party components:
 
-- NMS.py / pyMHF — monkeyman192, MIT (the patterns in `dll/tools/nmspy_data_185034.json` come from NMS.py; see `dll/tools/NMS.py-LICENSE.txt`).
+- NMS.py / pyMHF — monkeyman192, MIT (the DLL's structure offsets come from NMS.py's `dll/tools/nmspy_data_185034.json`; since 0.2.0-dev.2 the function patterns are our own, `dll/tools/sigs_185034.json`; see `dll/tools/NMS.py-LICENSE.txt`).
 - MinHook — Tsuda Kageyu, BSD-2-Clause (`dll/third_party/MinHook-LICENSE.txt`).
 - JSON for Modern C++ (nlohmann/json) — Niels Lohmann, MIT (`dll/third_party/nlohmann/LICENSE.MIT`).
 - Pillow — MIT-CMU (bundled in the overlay `.exe`; installed separately for the lab version).

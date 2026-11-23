@@ -12,7 +12,8 @@ using VkProbeLog = void (*)(const char* fmt, ...);
 
 // Engancha vkCreateInstance, vkCreateDevice, vkGetDeviceProcAddr, vkCreateSwapchainKHR y
 // vkQueuePresentKHR del cargador de Vulkan. Solo anota; todo pasa sin cambios al juego.
-bool VkProbeInstall(VkProbeLog log);
+// Ademas prepara el recuadro dentro del juego (vk_overlay): text = lineas a mostrar.
+bool VkProbeInstall(VkProbeLog log, std::wstring (*text)());
 // Escribe en el log un resumen (GPU, cadena de imagenes, presentaciones, ventana, modulos cargados).
 void VkProbeReport(const char* when, HWND game_window);
 // Resumen para /debug.

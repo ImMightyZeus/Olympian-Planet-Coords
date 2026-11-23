@@ -19,7 +19,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.2.0-dev.1";  // v0.2 en desarrollo: sonda de Vulkan (solo diagnostico)
+constexpr const char* kModVersion = "0.2.0-dev.2";  // v0.2 en desarrollo: recuadro de prueba dentro del juego
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;
@@ -78,6 +78,8 @@ class Core {
     std::string Put(const std::string& route, const Json& query);
 
     std::string Lang();
+    // Ajuste "ingame_box" de datos.json (por defecto si): dibujar el recuadro dentro del juego.
+    bool InGameBox();
     const std::string& DataPath() const { return data_path_; }
 
     // Marcador del frame actual (para el hook de cGcBaseBuildingManager::Update). Seguro desde

@@ -1,13 +1,13 @@
 """Genera los headers C++ del DLL a partir de datos publicos:
 
-* nms_sigs.h      <- tools/nmspy_data_<build>.json (NMS.py, licencia MIT): patrones de bytes
-                     de las funciones del juego que usa Olympian Planet Coords.
+* nms_sigs.h      <- tools/sigs_<build>.json: patrones de bytes propios de las funciones del juego
+                     que usa Olympian Planet Coords (sacados del NMS.exe con analisis estatico).
 * winmm_stubs.S   <- tools/winmm_exports.txt: un "salto" por cada funcion de winmm.dll, para
                      que el DLL se haga pasar por winmm.dll y reenvie todo al de Windows.
 * winmm.def       <- exportaciones del DLL.
 
-Cuando NMS.py publique una version nueva (nuevo parche del juego): copiar su tools/data.json
-como tools/nmspy_data_<build>.json, volver a ejecutar este script con --build <build> y recompilar.
+Tras un parche del juego: generar tools/sigs_<build>.json con los patrones del NMS.exe nuevo (cada uno
+debe aparecer una sola vez en .text), volver a ejecutar este script con --build <build> y recompilar.
 
 Uso: python tools/gen_headers.py --build 185034
 """
@@ -37,14 +37,14 @@ def c_ident(name: str) -> str:
 
 
 def gen_sigs(build: str) -> str:
-    data = json.load(open(os.path.join(HERE, f"nmspy_data_{build}.json"), encoding="utf-8"))
+    data = json.load(open(os.path.join(HERE, f"sigs_{build}.json"), encoding="utf-8"))
     by_name = {f["name"]: f for f in data["functions"]}
     missing = [n for n in FUNCTIONS if n not in by_name]
     if missing:
-        raise SystemExit(f"Faltan en los datos de NMS.py: {missing}")
+        raise SystemExit(f"Faltan en sigs_{build}.json: {missing}")
     lines = [
         "// GENERADO por tools/gen_headers.py - no editar a mano.",
-        f"// Fuente: NMS.py (monkeyman192, MIT) tools/data.json, build {build}.",
+        f"// Fuente: tools/sigs_{build}.json (patrones propios), build {build}.",
         "#pragma once",
         f'#define NMS_EXPECTED_BUILD "{build}"',
         "struct NmsSig { const char* name; const char* pattern; };",

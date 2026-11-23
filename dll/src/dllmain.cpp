@@ -16,7 +16,7 @@
 // este DLL carga el verdadero (System32) y le reenvia todas las llamadas, asi que el juego funciona
 // igual. Ademas:
 //   1. Comprueba que la version de NMS.exe sea la esperada (si no, no hace nada mas).
-//   2. Busca en NMS.exe las funciones del juego (patrones de NMS.py) y lo anota en el log.
+//   2. Busca en NMS.exe las funciones del juego (patrones propios, tools/sigs_<build>.json) y lo anota.
 //   3. Engancha cGcApplication::Update: en cada frame LEE (nunca escribe) la posicion del jugador
 //      y el planeta, y calcula las coordenadas igual que la version Python v0.0.3.
 //   4. Sirve esas coordenadas en http://127.0.0.1:5000/OlympianPlanetCoords/ para el overlay, y
@@ -28,6 +28,9 @@
 //      no queda nada guardado en la partida.
 //   6. Tecla (F9 por defecto): con el juego en primer plano, abre el cuadro para escribir
 //      coordenadas en el overlay.
+//   7. v0.2 (en desarrollo): dibuja un recuadro con las coordenadas dentro del juego, copiandolo en
+//      cada imagen antes de que el juego la muestre (vk_overlay.cpp). Se apaga con "ingame_box": false
+//      en los ajustes de datos.json.
 
 #include <windows.h>
 
@@ -48,10 +51,11 @@
 #include "http_server.hpp"
 #include "nms_sigs.h"
 #include "routes.hpp"
+#include "vk_overlay.hpp"
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.1"
+#define OLYMPIAN_VERSION "0.2.0-dev.2"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -364,6 +368,48 @@ HWND GameWindow() {
     return f.best;
 }
 
+std::atomic<olympian::Core*> g_core_box{nullptr};
+
+std::wstring Wide(const std::string& s) {
+    if (s.empty()) return L"";
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+    std::wstring w(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), &w[0], n);
+    return w;
+}
+
+// Lineas del recuadro dentro del juego (titulo, coordenadas o motivo, destino). Vacio = no dibujar.
+std::wstring BoxText() {
+    olympian::Core* c = g_core_box.load();
+    if (!c || !c->InGameBox()) return L"";
+    olympian::Json s = olympian::Json::parse(c->CoordsJson(), nullptr, false);
+    if (s.is_discarded()) return L"";
+    const bool es = c->Lang() == "es";
+    std::string l2, l3;
+    char buf[160];
+    if (s.contains("lat") && s["lat"].is_number() && s.contains("lon") && s["lon"].is_number()) {
+        snprintf(buf, sizeof(buf), "%+.2f, %+.2f", s["lat"].get<double>(), s["lon"].get<double>());
+        l2 = buf;
+        if (s.value("in_orbit", false)) l2 += es ? " \xC2\xB7 en \xC3\xB3rbita" : " \xC2\xB7 in orbit";
+    } else {
+        l2 = s.contains("reason") && s["reason"].is_string() ? s["reason"].get<std::string>() : "";
+    }
+    if (s.contains("destination") && s["destination"].is_object()) {
+        const olympian::Json& d = s["destination"];
+        std::string name = d.contains("name") && d["name"].is_string() ? d["name"].get<std::string>() : "";
+        if (name.empty() && d.contains("lat") && d["lat"].is_number() && d["lon"].is_number()) {
+            snprintf(buf, sizeof(buf), "%+.2f, %+.2f", d["lat"].get<double>(), d["lon"].get<double>());
+            name = buf;
+        }
+        double m = d.contains("distance_m") && d["distance_m"].is_number() ? d["distance_m"].get<double>() : 0;
+        if (m < 1000) snprintf(buf, sizeof(buf), "%.0f m", m);
+        else snprintf(buf, sizeof(buf), "%.1f km", m / 1000);
+        std::string card = d.contains("cardinal") && d["cardinal"].is_string() ? d["cardinal"].get<std::string>() : "";
+        l3 = "\xE2\x86\x92 " + name + " \xC2\xB7 " + buf + (card.empty() ? "" : " " + card);
+    }
+    return Wide("OLYMPIAN PLANET COORDS\n" + l2 + "\n" + l3);
+}
+
 // Informes de la sonda de Vulkan: a los 20 s, 1 min, 3 min y luego cada 10 min.
 DWORD WINAPI VkReportThread(LPVOID) {
     const DWORD waits[] = {20000, 40000, 120000};
@@ -400,8 +446,8 @@ DWORD WINAPI Worker(LPVOID) {
             "actualizar Olympian para esta version.");
         return 0;
     }
-    // Sonda de Vulkan (solo anota; no dibuja): lo antes posible, para ver la creacion del dispositivo.
-    olympian::VkProbeInstall(&Log);
+    // Sonda de Vulkan y recuadro dentro del juego: lo antes posible, para ver la creacion del dispositivo.
+    olympian::VkProbeInstall(&Log, &BoxText);
     CreateThread(nullptr, 0, VkReportThread, nullptr, 0, nullptr);
     uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     // El juego puede seguir preparando su codigo cuando Windows carga este DLL: si falta alguna
@@ -439,6 +485,7 @@ DWORD WINAPI Worker(LPVOID) {
     CreateDirectoryW(ddir.c_str(), nullptr);
     std::string data_path = Utf8(ddir + L"\\datos.json");
     g_core = std::make_unique<olympian::Core>(data_path, SystemLang());
+    g_core_box = g_core.get();
     Log("Datos: %s  idioma=%s", data_path.c_str(), g_core->Lang().c_str());
 
     g_debug_extra = olympian::Json{{"dll", {{"version", OLYMPIAN_VERSION},
@@ -466,6 +513,7 @@ DWORD WINAPI Worker(LPVOID) {
             extra["dll"]["update_global"] = buf;
             extra["dll"]["bbm_frames"] = g_bbm_frames.load();
             extra["vulkan"] = olympian::Json::parse(olympian::VkProbeJson());
+            extra["overlay"] = olympian::Json::parse(olympian::OverlayJson());
             olympian::HttpResponse res = olympian::Route(*g_core, req, extra);
             if (req.method == "PUT" && req.path.find("/marker") != std::string::npos &&
                 res.body.find("\"queued\":true") != std::string::npos)
