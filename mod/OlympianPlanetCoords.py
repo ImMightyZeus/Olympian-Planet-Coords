@@ -64,7 +64,6 @@ from typing import Optional
 from pymhf import Mod
 from pymhf.core.hooking import on_key_pressed
 from pymhf.core.http_api import endpoint
-from pymhf.core.memutils import get_addressof, map_struct
 from pymhf.gui.decorators import BOOLEAN, ENUM, STRING, gui_button
 
 import nmspy.data.basic_types as basic
@@ -123,6 +122,10 @@ MESSAGES = {
     "dest_set": {"es": "Destino: {coords}", "en": "Destination: {coords}"},
     "dest_cleared": {"es": "Destino quitado", "en": "Destination cleared"},
     "no_dest_here": {"es": "no hay destino en este planeta", "en": "no destination on this planet"},
+    "history_removed": {"es": "Quitado de la lista: {coords}", "en": "Removed from the list: {coords}"},
+    "history_removed_dest": {"es": "Quitado de la lista y como destino: {coords}",
+                             "en": "Removed from the list and as destination: {coords}"},
+    "not_in_history": {"es": "ese punto no esta en la lista", "en": "that point is not in the list"},
     "marker_error": {"es": "error al crear el marcador: {err}", "en": "could not create the marker: {err}"},
     "marker_rejected": {"es": "el juego rechazo el marcador; prueba el otro metodo",
                         "en": "the game rejected the marker; try the other method"},
@@ -437,6 +440,79 @@ def push_history(history: list, lat: float, lon: float, name: str) -> list:
     return ([entry] + rest)[:HISTORY_MAX]
 
 
+def remove_from_history(history: list, lat: float, lon: float) -> tuple[list, bool]:
+    """Quita de la lista el punto (lat, lon) redondeado a 2 decimales. Devuelve (lista, se quito)."""
+    key = (round(lat, 2), round(lon, 2))
+    rest = [h for h in history if (h.get("lat"), h.get("lon")) != key]
+    return rest, len(rest) != len(history)
+
+
+# --------------------------------------------------------------------------------------------
+# cGcApplication con la partida ya cargada
+# --------------------------------------------------------------------------------------------
+# NMS.py solo guarda cGcApplication en el primer cambio de estado del juego. Si se inyecta con la
+# partida ya cargada, ese cambio no llega. El 'this' de cGcApplication::Update NO sirve (Update no usa
+# rcx). Lo que si usa Update es un puntero global a cGcApplication::Data: en NMS.exe 185034 lo lee con
+# "mov rax, [rip+...]" en RVA 0x2dd467 (48 8B 05 1A EE C8 06), y el global esta en RVA 0x6F6C288.
+# Con ese Data se arma un cGcApplication propio que solo tiene mpData, que es lo unico que usa gameData.
+APP_DATA_GLOBAL_RVA = 0x6F6C288
+
+
+def _read_mem(addr: int, size: int) -> Optional[bytes]:
+    """Lee memoria del propio proceso sin riesgo (ReadProcessMemory); None si no se puede."""
+    if not addr:
+        return None
+    try:
+        k32 = ctypes.windll.kernel32
+        buf = (ctypes.c_ubyte * size)()
+        got = ctypes.c_size_t(0)
+        k32.ReadProcessMemory.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t,
+                                          ctypes.POINTER(ctypes.c_size_t)]
+        k32.GetCurrentProcess.restype = ctypes.c_void_p
+        ok = k32.ReadProcessMemory(k32.GetCurrentProcess(), ctypes.c_void_p(addr), buf, size, ctypes.byref(got))
+        return bytes(buf) if ok and got.value == size else None
+    except Exception:
+        return None
+
+
+def _module_base() -> int:
+    try:
+        k32 = ctypes.windll.kernel32
+        k32.GetModuleHandleW.restype = ctypes.c_void_p
+        return int(k32.GetModuleHandleW(None) or 0)
+    except Exception:
+        return 0
+
+
+def locate_app_data(base: Optional[int] = None, reader=None) -> Optional[int]:
+    """Direccion de cGcApplication::Data leida del global que usa cGcApplication::Update, o None.
+    Solo la acepta si se puede leer la ubicacion del jugador y es un valor valido (0-15)."""
+    reader = reader or _read_mem
+    base = _module_base() if base is None else base
+    raw = reader(base + APP_DATA_GLOBAL_RVA, 8) if base else None
+    if not raw:
+        return None
+    data = int.from_bytes(raw, "little")
+    if not data:
+        return None
+    off = (nms.cGcApplication.Data.mSimulation.offset + nms.cGcSimulation.mEnvironment.offset
+           + nms.cGcEnvironment.mPlayerEnvironment.offset + nms.cGcPlayerEnvironment.meLocationStable.offset)
+    loc = reader(data + off, 4)
+    if not loc or int.from_bytes(loc, "little") > 15:
+        return None
+    return data
+
+
+def application_from_data(data: int):
+    """cGcApplication propio (en memoria del mod) con mpData = data. Devuelve (buffer, estructura):
+    hay que guardar el buffer mientras se use."""
+    buf = (ctypes.c_ubyte * ctypes.sizeof(nms.cGcApplication))()
+    app = nms.cGcApplication.from_buffer(buf)
+    ptr_type = type(app.mpData)
+    app.mpData = ctypes.cast(ctypes.c_void_p(data), ptr_type)
+    return buf, app
+
+
 # --------------------------------------------------------------------------------------------
 # Mod
 # --------------------------------------------------------------------------------------------
@@ -465,6 +541,8 @@ class OlympianPlanetCoords(Mod):
         self.input_request_id = 0
         self._bb_manager_seen = False
         self._app_from_update = False
+        self._app_buf = None  # memoria del cGcApplication propio (ver application_from_data)
+        self._app_next_try = 0.0
 
     # ---- ajustes ---------------------------------------------------------------------------
     @property
@@ -764,6 +842,24 @@ class OlympianPlanetCoords(Mod):
                     self._remove_active()
                     self._save()
                     self._set_result(True, self.t("dest_cleared"))
+                elif kind == "forget":
+                    # Cruz de la lista de destinos: quita el punto de la lista y, si es el destino del
+                    # planeta actual, tambien el destino y su marcador.
+                    lat, lon = args
+                    history, found = remove_from_history(self.data["history"], lat, lon)
+                    if not found:
+                        raise LookupError(self.t("not_in_history"))
+                    self.data["history"] = history
+                    key = self._ctx["planet_key"] if self._ctx is not None else None
+                    dest = self.data["destinations"].get(key) if key else None
+                    also_dest = bool(dest) and (dest.get("lat"), dest.get("lon")) == (round(lat, 2), round(lon, 2))
+                    if also_dest:
+                        del self.data["destinations"][key]
+                        self._remove_active()
+                    self._save()
+                    coords = f"{lat:+.2f}, {lon:+.2f}"
+                    self._set_result(True, self.t("history_removed_dest" if also_dest else "history_removed",
+                                                  coords=coords))
             except LookupError as e:
                 self._set_result(False, str(e))
             except Exception as e:
@@ -774,17 +870,21 @@ class OlympianPlanetCoords(Mod):
     @nms.cGcApplication.Update.after
     def on_app_update(self, this):
         """NMS.py solo localiza cGcApplication en el primer cambio de estado del juego. Si NMS.py se
-        inyecta con la partida ya cargada, ese cambio no llega y gameData queda vacio para siempre:
-        aqui se toma de 'this' (cGcApplication::Update corre cada frame)."""
-        if gameData.GcApplication is None:
-            try:
-                gameData.GcApplication = map_struct(get_addressof(this), nms.cGcApplication)
+        inyecta con la partida ya cargada, ese cambio no llega y gameData queda vacio: aqui se arma
+        desde el puntero global a cGcApplication::Data (ver locate_app_data). Un intento por segundo."""
+        if gameData.GcApplication is not None or time.time() < self._app_next_try:
+            return
+        self._app_next_try = time.time() + 1.0
+        try:
+            data = locate_app_data()
+            if data:
+                self._app_buf, gameData.GcApplication = application_from_data(data)
                 self._app_from_update = True
-                logger.info("cGcApplication localizado desde cGcApplication::Update")
-            except Exception:
-                if time.time() - self._last_error_log > 5:
-                    self._last_error_log = time.time()
-                    logger.exception("No se pudo localizar cGcApplication")
+                logger.info("cGcApplication::Data localizado desde el global de cGcApplication::Update")
+        except Exception:
+            if time.time() - self._last_error_log > 5:
+                self._last_error_log = time.time()
+                logger.exception("No se pudo localizar cGcApplication::Data")
 
     @nms.cGcPlayerHUD.Update.after
     def on_hud_update(self, this, lfTimeStep):
@@ -874,6 +974,14 @@ class OlympianPlanetCoords(Mod):
     @endpoint(route="clear", method="PUT")
     def http_clear(self, confirm: bool = True):
         self._requests.put(("clear", ()))
+        return {"queued": True}
+
+    @endpoint(route="forget", method="PUT")
+    def http_forget(self, lat: float, lon: float):
+        """Quita un punto de la lista de destinos (la cruz de la lista)."""
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return {"queued": False, "message": self.t("out_of_range")}
+        self._requests.put(("forget", (float(lat), float(lon))))
         return {"queued": True}
 
     @endpoint(route="hotkey", method="PUT")

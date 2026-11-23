@@ -29,6 +29,10 @@ const std::map<std::string, std::pair<const char*, const char*>> kMessages = {
     {"dest_set", {"Destino: {coords}", "Destination: {coords}"}},
     {"dest_cleared", {"Destino quitado", "Destination cleared"}},
     {"no_dest_here", {"no hay destino en este planeta", "no destination on this planet"}},
+    {"history_removed", {"Quitado de la lista: {coords}", "Removed from the list: {coords}"}},
+    {"history_removed_dest",
+     {"Quitado de la lista y como destino: {coords}", "Removed from the list and as destination: {coords}"}},
+    {"not_in_history", {"ese punto no esta en la lista", "that point is not in the list"}},
     {"out_of_range", {"coordenadas fuera de rango", "coordinates out of range"}},
     {"bad_hotkey", {"tecla no valida", "invalid key"}},
     {"marker_label", {"Destino", "Destination"}},
@@ -520,6 +524,39 @@ std::string Core::Put(const std::string& route, const Json& query) {
             data_["destinations"].erase(key);
             Save();
             SetResult(true, T("dest_cleared"));
+        }
+    } else if (route == "forget") {
+        // Cruz de la lista de destinos (igual que "forget" de Python): quita el punto de la lista y, si
+        // es el destino del planeta actual, tambien el destino (el marcador sale en el frame siguiente).
+        double lat = 0, lon = 0;
+        if (!ParseNumber(query, "lat", &lat) || !ParseNumber(query, "lon", &lon) || lat < -90 || lat > 90 ||
+            lon < -180 || lon > 180) {
+            r = Json{{"queued", false}, {"message", T("out_of_range")}};
+        } else {
+            r = Json{{"queued", true}};
+            double rl = geo::RoundTo(lat, 2), ro = geo::RoundTo(lon, 2);
+            auto same = [&](const Json& h) {
+                return h.is_object() && h.contains("lat") && h.contains("lon") && h["lat"].is_number() &&
+                       h["lon"].is_number() && h["lat"].get<double>() == rl && h["lon"].get<double>() == ro;
+            };
+            Json kept = Json::array();
+            bool found = false;
+            if (data_["history"].is_array())
+                for (const auto& h : data_["history"]) {
+                    if (same(h)) found = true;
+                    else kept.push_back(h);
+                }
+            if (!found) {
+                SetResult(false, T("not_in_history"));
+            } else {
+                data_["history"] = kept;
+                std::string key = context_.is_null() ? "" : context_["planet_key"].get<std::string>();
+                bool also_dest = !key.empty() && data_["destinations"].contains(key) && same(data_["destinations"][key]);
+                if (also_dest) data_["destinations"].erase(key);
+                Save();
+                SetResult(true, Replace(T(also_dest ? "history_removed_dest" : "history_removed"), "{coords}",
+                                        FormatCoords(lat, lon)));
+            }
         }
     } else {
         r = Json{{"detail", "Not Found"}};

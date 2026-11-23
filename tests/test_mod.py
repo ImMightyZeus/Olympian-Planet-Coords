@@ -163,7 +163,7 @@ def test_pymhf_detecta_hooks_gui_y_endpoints():
     assert len(m._hotkey_funcs) == 1
     assert [f._hotkey for f in m._hotkey_funcs] == [mod.HOTKEY_INPUT]
     assert sorted(f._api_endpoint.route for f in m._http_endpoints["GET"]) == ["/coords", "/debug"]
-    assert sorted(f._api_endpoint.route for f in m._http_endpoints["PUT"]) == ["/clear", "/hotkey", "/lang", "/marker"]
+    assert sorted(f._api_endpoint.route for f in m._http_endpoints["PUT"]) == ["/clear", "/forget", "/hotkey", "/lang", "/marker"]
     labels = [getattr(getattr(w, "_widget_data", w), "label", None) for w in m._gui_widgets]
     for needed in ["Coordenadas", "Destino", "Ir a (lat, lon)", "Poner destino", "Quitar destino",
                    "Marcador", "Flecha inv.", "Tecla (Reload Mod)", "Idioma (Reload Mod)", "Creditos"]:
@@ -342,6 +342,46 @@ def test_historial_maximo_10_sin_duplicados():
     assert [x["lat"] for x in h].count(5.0) == 1
 
 
+def test_cruz_de_la_lista_quita_del_historial_y_del_destino():
+    """Cruz de la lista de destinos (PUT /forget): quita el punto de la lista y, si es el destino del
+    planeta actual, tambien el destino y su marcador. Los destinos de otros planetas no se tocan."""
+    m = make_mod()
+    at(0, 0)
+    m.http_marker(10, 20, "A")
+    m.http_marker(30.004, -40, "B")
+    tick(m, 120)  # el marcador sale cuando la posicion es estable
+    assert m.http_coords["destination"]["name"] == "B" and m._active
+    # punto que no es el destino activo: solo sale de la lista
+    assert m.http_forget(10, 20) == {"queued": True}
+    tick(m)
+    s = m.http_coords
+    assert [h["name"] for h in s["history"]] == ["B"] and s["destination"]["name"] == "B", s
+    assert s["last_result"]["ok"] is True and s["last_result"]["message"] == "Quitado de la lista: +10.00, +20.00"
+    # el destino activo (redondeo a 2 decimales): sale de la lista y deja de ser destino
+    m.http_forget(30.0, -40.001)
+    tick(m)
+    s = m.http_coords
+    assert s["history"] == [] and s["destination"] is None and not m._active, s
+    assert s["last_result"]["message"] == "Quitado de la lista y como destino: +30.00, -40.00"
+    assert mod.load_data(m._data_path)["history"] == []
+    # un punto que no esta en la lista
+    m.http_forget(1, 1)
+    tick(m)
+    assert m.http_coords["last_result"] == {"ok": False, "message": "ese punto no esta en la lista",
+                                            "seq": m.http_coords["last_result"]["seq"]}
+    assert m.http_forget(91, 0)["queued"] is False
+    # fuera del planeta: se puede quitar de la lista, el destino guardado del planeta no se toca
+    m.http_marker(5, 5, "C")
+    tick(m)
+    GAME.set_location(EnvironmentLocation.Enum.SpaceStation)
+    tick(m)
+    m.http_forget(5, 5)
+    tick(m)
+    assert m.http_coords["history"] == [] and m.http_coords["last_result"]["message"] == "Quitado de la lista: +5.00, +5.00"
+    assert any(d.get("name") == "C" for d in m.data["destinations"].values())
+    GAME.set_location(EnvironmentLocation.Enum.PlanetOnFoot)
+
+
 def test_rechazo_del_juego_sin_reintentos_infinitos():
     m = make_mod()
     at(0, 0)
@@ -508,23 +548,49 @@ def test_tecla_por_defecto_f9_y_configurable():
 
 def test_localiza_aplicacion_si_se_inyecta_con_partida_cargada():
     """Con la partida ya cargada NMS.py no ve el cambio de estado y gameData.GcApplication queda en
-    None: el hook de cGcApplication::Update lo toma de 'this'."""
-    from pymhf.core.memutils import get_addressof
-
-    m = make_mod()
-    app = nms.cGcApplication()
+    None: el hook de cGcApplication::Update lo arma desde el puntero global a cGcApplication::Data
+    (el 'this' de Update no sirve: Update no usa rcx)."""
+    data = nms.cGcApplication.Data()
+    off = (nms.cGcApplication.Data.mSimulation.offset + nms.cGcSimulation.mEnvironment.offset
+           + nms.cGcEnvironment.mPlayerEnvironment.offset + nms.cGcPlayerEnvironment.meLocationStable.offset)
+    ctypes.c_uint32.from_buffer(data, off).value = int(EnvironmentLocation.Enum.PlanetOnFoot)
+    glob = ctypes.c_uint64(ctypes.addressof(data))
+    base = ctypes.addressof(glob) - mod.APP_DATA_GLOBAL_RVA
+    old_read, old_base = mod._read_mem, mod._module_base
+    mod._read_mem = lambda addr, size: ctypes.string_at(addr, size)
+    mod._module_base = lambda: base
     prev = common.gameData.GcApplication
     try:
+        assert mod.locate_app_data() == ctypes.addressof(data)
+        m = make_mod()
         common.gameData.GcApplication = None
-        m.on_app_update(ctypes.pointer(app))
-        assert common.gameData.GcApplication is not None
-        assert get_addressof(common.gameData.GcApplication) == ctypes.addressof(app)
-        assert m._app_from_update is True
-        other = nms.cGcApplication()
-        m.on_app_update(ctypes.pointer(other))  # si ya existe, no lo toca
-        assert get_addressof(common.gameData.GcApplication) == ctypes.addressof(app)
+        m.on_app_update(ctypes.c_void_p(0x1234))  # 'this' de Update: se ignora
+        app = common.gameData.GcApplication
+        assert app is not None and m._app_from_update is True
+        assert ctypes.addressof(app.mpData.contents) == ctypes.addressof(data)
+        # (en estas pruebas gameData.simulation esta sustituido por el juego simulado: se mira via mpData)
+        sim = app.mpData.contents.mSimulation
+        assert ctypes.addressof(sim) == ctypes.addressof(data.mSimulation)
+        loc = sim.mEnvironment.mPlayerEnvironment.meLocationStable
+        assert int(getattr(loc, "value", loc)) == int(EnvironmentLocation.Enum.PlanetOnFoot)
+        # si ya existe, no lo toca
+        m._app_next_try = 0
+        m.on_app_update(None)
+        assert common.gameData.GcApplication is app
+        # valores que no son de una partida: no se acepta
+        ctypes.c_uint32.from_buffer(data, off).value = 99
+        assert mod.locate_app_data() is None
+        glob.value = 0
+        assert mod.locate_app_data() is None
+        mod._read_mem = lambda addr, size: None  # memoria ilegible
+        assert mod.locate_app_data() is None
+        common.gameData.GcApplication = None
+        m2 = make_mod()
+        m2.on_app_update(None)
+        assert common.gameData.GcApplication is None and m2._app_from_update is False
     finally:
         common.gameData.GcApplication = prev
+        mod._read_mem, mod._module_base = old_read, old_base
 
 
 def test_argumentos_convertibles_por_ctypes():

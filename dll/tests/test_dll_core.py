@@ -356,6 +356,46 @@ def test_destinos_historial_tecla_y_marcador(exe):
     h.close()
 
 
+@test
+def test_cruz_de_la_lista(exe):
+    """PUT /forget (cruz de la lista de destinos): mismos mensajes y datos que la version Python."""
+    path = os.path.join(tempfile.mkdtemp(), "datos.json")
+    h = Harness([exe, "core", path])
+    h.ask(frame(12.0, -45.0, 0.0))
+    h.ask({"put": "marker", "query": {"lat": "10", "lon": "20", "name": "A"}})
+    h.ask({"put": "marker", "query": {"lat": "30.004", "lon": "-40", "name": "B"}})
+    h.ask(frame(12.0, -45.0, 1.2))
+    assert h.ask({"marker": True})["valid"] is True
+    # no es el destino activo: solo sale de la lista
+    assert h.ask({"put": "forget", "query": {"lat": "10", "lon": "20"}}) == {"queued": True}
+    s = h.ask(frame(12.0, -45.0, 1.3))
+    assert [x["name"] for x in s["history"]] == ["B"] and s["destination"]["name"] == "B", s
+    assert s["last_result"]["message"] == py.tr("history_removed", "es", coords="+10.00, +20.00")
+    # el destino activo (redondeo a 2 decimales): sale de la lista y deja de ser destino
+    h.ask({"put": "forget", "query": {"lat": "30.0", "lon": "-40.001"}})
+    s = h.ask(frame(12.0, -45.0, 1.4))
+    assert s["history"] == [] and s["destination"] is None, s
+    assert s["last_result"]["message"] == py.tr("history_removed_dest", "es", coords="+30.00, -40.00")
+    assert h.ask({"marker": True})["valid"] is False
+    assert py.load_data(path)["history"] == [] and KEY not in py.load_data(path)["destinations"]
+    # no esta en la lista / fuera de rango
+    h.ask({"put": "forget", "query": {"lat": "1", "lon": "1"}})
+    s = h.ask(frame(12.0, -45.0, 1.5))
+    assert s["last_result"]["ok"] is False and s["last_result"]["message"] == py.tr("not_in_history", "es")
+    r = h.ask({"put": "forget", "query": {"lat": "91", "lon": "0"}})
+    assert r == {"queued": False, "message": py.tr("out_of_range", "es")}, r
+    # fuera del planeta: sale de la lista, el destino guardado del planeta queda
+    h.ask({"put": "marker", "query": {"lat": "5", "lon": "5", "name": "C"}})
+    h.ask({"none": True, "t": 2.0})
+    h.ask({"put": "forget", "query": {"lat": "5", "lon": "5"}})
+    s = h.ask({"none": True, "t": 2.1})
+    assert s["history"] == [] and s["last_result"]["message"] == py.tr("history_removed", "es", coords="+5.00, +5.00")
+    assert py.load_data(path)["destinations"][KEY]["name"] == "C"
+    # mismo resultado que la funcion de Python
+    assert py.remove_from_history([{"lat": 1.0, "lon": 2.0, "name": ""}], 1.004, 1.996) == ([], True)
+    h.close()
+
+
 def check_server_with_overlay_client(port):
     client = ov.ModClient("127.0.0.1", port)
     s = client.get_coords()

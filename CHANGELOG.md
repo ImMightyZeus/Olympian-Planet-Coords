@@ -1,5 +1,17 @@
 # Changelog / Registro de cambios
 
+## Sin publicar / Unreleased
+
+**Español**
+- Ruta nueva `PUT /forget?lat=&lon=` (en el DLL y en la versión Python), base para la lista de destinos: quita un punto de la lista y, si es el destino del planeta actual, también el destino y su marcador.
+- Versión Python (laboratorio): con la partida ya cargada al inyectar NMS.py, el mod ya no toma un puntero equivocado; lee `cGcApplication::Data` del mismo global que usa el juego en `cGcApplication::Update` (NMS 185034) y lo comprueba antes de usarlo.
+- Instrucciones: nota para laptops (si F9 abre otra cosa, usar Fn + F9, el bloqueo de Fn u otra tecla).
+
+**English**
+- New `PUT /forget?lat=&lon=` route (DLL and Python version), groundwork for the destinations list: removes a point from the list and, if it is the current planet's destination, also the destination and its marker.
+- Python (lab) version: when NMS.py is injected with a save already loaded, the mod no longer picks a wrong pointer; it reads `cGcApplication::Data` from the same global the game uses in `cGcApplication::Update` (NMS 185034) and checks it before use.
+- Instructions: laptop note (if F9 opens something else, use Fn + F9, the Fn lock or another key).
+
 ## v0.1.0-beta — 2026-11-17
 
 **Español**
