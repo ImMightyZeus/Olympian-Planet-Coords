@@ -140,7 +140,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.2" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.3" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -422,6 +422,54 @@ def test_idioma_ruso(exe):
     h.close()
 
 
+@test
+def test_lugar_estacion_y_espacio_igual_que_python(exe):
+    """Nombre de la estacion / sistema y galaxia cuando no hay planeta: mismo resultado que Python."""
+    path = os.path.join(tempfile.mkdtemp(), "datos.json")
+    h = Harness([exe, "core", path])
+    g = h.ask({"galaxy": [9, -2047, 127, 2047, 4095, 5]})
+    assert g["names"][1:257] == list(py.GALAXY_NAMES), "misma tabla de galaxias"
+    assert g["names"][0] == py.galaxy_name(-1) and g["names"][257] == py.galaxy_name(256) == "#257"
+    assert int(g["ua"]) == py.universe_address(9, -2047, 127, 2047, 4095, 5)
+    # sin fuente de nombres: textos de reserva
+    s = h.ask(frame(12.0, -45.0, 0, location=2, reality=9))
+    assert s["reason"] == py.tr("not_on_planet", "es") and s["lat"] is None, s
+    assert s["place"] == {"kind": "station", "title": "Estacion espacial", "subtitle": "Eissentam", "station": "",
+                          "system": "", "galaxy": "Eissentam"}, s["place"]
+    h.close()
+    h = Harness([exe, "core", path])
+    h.ask({"names": {"system": "Hamsonde XIV", "station": "ua"}})
+    s = h.ask(frame(12.0, -45.0, 0, location=2, reality=9))
+    ua = py.universe_address(9, 10, -3, 7, 42)
+    assert s["place"] == {"kind": "station", "title": f"{ua:x}", "subtitle": "Hamsonde XIV · Eissentam",
+                          "station": f"{ua:x}", "system": "Hamsonde XIV", "galaxy": "Eissentam"}, s["place"]
+    n = h.ask({"name_calls": True})["name_calls"]
+    for i in range(10):
+        h.ask(frame(12.0, -45.0, 0.1 + i * 0.1, location=2, reality=9))
+    assert h.ask({"name_calls": True})["name_calls"] == n, "no pide nombres al juego en cada frame"
+    h.ask(frame(12.0, -45.0, 5.0, location=2, reality=9))
+    assert h.ask({"name_calls": True})["name_calls"] == n + 2, "vuelve a pedirlos pasados unos segundos"
+    # volando en el espacio, lejos del planeta: sistema y debajo la galaxia
+    s = h.ask(frame(12.0, -45.0, 5.1, location=1, radius=R * 10, reality=9))
+    assert s["place"]["kind"] == "space" and s["place"]["title"] == "Hamsonde XIV", s["place"]
+    assert s["place"]["subtitle"] == "Eissentam" and s["lat"] is None
+    # en un planeta: sin lugar; carguero: sin lugar
+    s = h.ask(frame(12.0, -45.0, 5.2))
+    assert s["place"] is None and s["lat"] == 12.0
+    s = h.ask(frame(12.0, -45.0, 5.3, location=9))
+    assert s["place"] is None
+    # interruptor en datos.json: location_names = false -> no llama al juego
+    h.close()
+    d = json.load(open(path, encoding="utf-8"))
+    d["settings"]["location_names"] = False
+    json.dump(d, open(path, "w", encoding="utf-8"))
+    h = Harness([exe, "core", path])
+    h.ask({"names": {"system": "X", "station": "Y"}})
+    s = h.ask(frame(12.0, -45.0, 0, location=1, radius=R * 10, reality=3))
+    assert h.ask({"name_calls": True})["name_calls"] == 0 and s["place"]["title"] == "Hesperius Dimension", s
+    h.close()
+
+
 def check_server_with_overlay_client(port):
     client = ov.ModClient("127.0.0.1", port)
     s = client.get_coords()
@@ -540,6 +588,8 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         log = open(os.path.join(game, "Olympian", "olympian.log"), encoding="utf-8").read()
         assert "cGcApplication reconocido (candidato 2 de 2)" in log, log
         assert "Hook cGcBaseBuildingManager::Update (marcador del HUD): MH_OK" in log, log
+        # el NMS falso no trae las funciones de nombres (opcionales): el mod sigue igual sin ellas
+        assert "Nombres del juego: sistema NO (rva=0x0), estacion NO (rva=0x0)" in log, log
         # sonda de Vulkan: engancha el cargador y ve pasar la instancia que crea el "juego"
         assert "[vk] gancho vkQueuePresentKHR: MH_OK" in log, log
         if "vkCreateInstance=no_loader" not in out:
@@ -568,7 +618,7 @@ def test_recuadro_en_el_juego_con_vulkan_simulado(exe):
         return
     wexe = os.path.join(BUILD, "overlay_harness.exe")
     subprocess.run(["x86_64-w64-mingw32-g++", "-O2", "-std=c++17", "-Wall", "-Wextra", "-Ithird_party",
-                    "-Ithird_party/vulkan", "tests/overlay_harness.cpp", "src/vk_overlay.cpp", "-o", wexe,
+                    "-Ithird_party/vulkan", "tests/overlay_harness.cpp", "src/vk_overlay.cpp", "src/fonts.S", "-o", wexe,
                     "-static", "-lgdi32"], cwd=DLL, check=True)
     env = dict(os.environ, WINEDEBUG="-all")
     r = subprocess.run(["wine", wexe], cwd=DLL, capture_output=True, text=True, env=env, timeout=120)

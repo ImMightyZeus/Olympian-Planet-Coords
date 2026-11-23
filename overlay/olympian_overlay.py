@@ -758,6 +758,8 @@ class Overlay:
 
         self.message = tk.Label(self.frame, text=self.tr("waiting_mod"), fg=MUTED, bg=BG,
                                 font=self.fonts["text"], anchor="w")
+        # En una estacion o volando en el espacio: debajo del nombre, en letra pequena, sistema / galaxia
+        self.place_sub = tk.Label(self.frame, text="", fg=MUTED, bg=BG, font=self.fonts["small"], anchor="w")
         self.now_row = CoordRow(self.frame, self.tr("tag_now"), FG, self.fonts)
         self.dest_row = CoordRow(self.frame, self.tr("tag_dest"), DEST, self.fonts)
         self.dest_info = tk.Label(self.frame, text="", fg=DEST, bg=BG, font=self.fonts["small"], anchor="w")
@@ -767,8 +769,8 @@ class Overlay:
         self._layout = None
         self._show(["message"])
 
-        for w in (self.frame, head, self.title, self.orbit_tag, self.message, self.dest_info, self.status,
-                  self.canvas):
+        for w in (self.frame, head, self.title, self.orbit_tag, self.message, self.place_sub, self.dest_info,
+                  self.status, self.canvas):
             w.bind("<Button-1>", self.start_edit)
             w.bind("<Button-3>", self.show_menu)
         for row in (self.now_row, self.dest_row):
@@ -888,10 +890,10 @@ class Overlay:
     def _show(self, names: list):
         if names == self._layout:
             return
-        for w in (self.message, self.now_row, self.dest_row, self.dest_info, self.entry):
+        for w in (self.message, self.place_sub, self.now_row, self.dest_row, self.dest_info, self.entry):
             w.pack_forget()
         self.status.pack_forget()
-        widgets = {"message": self.message, "now": self.now_row, "dest": self.dest_row,
+        widgets = {"message": self.message, "place_sub": self.place_sub, "now": self.now_row, "dest": self.dest_row,
                    "dest_info": self.dest_info, "entry": self.entry}
         for n in names:
             widgets[n].pack(fill="x", anchor="w")
@@ -901,7 +903,8 @@ class Overlay:
     def _view_rows(self) -> list:
         d = self.last_data or {}
         if d.get("lat") is None:
-            return ["message"]
+            place = d.get("place") or {}
+            return ["message", "place_sub"] if place.get("subtitle") else ["message"]
         rows = ["now"]
         if d.get("destination"):
             rows += ["dest", "dest_info"]
@@ -1181,7 +1184,13 @@ class Overlay:
             self.now_row.set(data["lat"], data["lon"])
             self.orbit_tag.configure(text=self.tr("orbit") if data.get("in_orbit") else "")
         else:
-            self.message.configure(text=data.get("reason") or self.tr("off_planet"), fg=MUTED)
+            place = data.get("place") or {}
+            if place.get("title"):
+                self.message.configure(text=place["title"], fg=FG)
+                self.place_sub.configure(text=place.get("subtitle") or "")
+            else:
+                self.message.configure(text=data.get("reason") or self.tr("off_planet"), fg=MUTED)
+                self.place_sub.configure(text="")
             self.orbit_tag.configure(text="")
         dest = data.get("destination")
         if dest:

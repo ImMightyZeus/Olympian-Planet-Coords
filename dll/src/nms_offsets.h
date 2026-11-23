@@ -8,6 +8,7 @@ constexpr unsigned long long DATA_SIMULATION = 0x4cd580;  // 5035392
 constexpr unsigned long long DATA_GAMESTATE = 0xe70;  // 3696
 constexpr unsigned long long SIM_ENVIRONMENT = 0xac930;  // 706864
 constexpr unsigned long long SIM_PLAYER = 0x25f860;  // 2488416
+constexpr unsigned long long SIM_SOLAR_SYSTEM = 0x25e090;  // 2482320
 constexpr unsigned long long ENV_PLAYERENV = 0x8c0;  // 2240
 constexpr unsigned long long PENV_PLAYERTM = 0x0;  // 0
 constexpr unsigned long long PENV_NEAREST_PLANET_INDEX = 0x2bc;  // 700

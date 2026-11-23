@@ -12,7 +12,9 @@
 namespace olympian {
 
 using OverlayLog = void (*)(const char* fmt, ...);
-// Texto del recuadro: lineas separadas por '\n' (UTF-16). Vacio = no dibujar.
+// Texto del recuadro: lineas separadas por '\n' (UTF-16). Vacio = no dibujar. Una linea que empieza
+// con kNumericLine son coordenadas: los digitos se dibujan en DSEG7 (el marcador no se dibuja).
+constexpr wchar_t kNumericLine = L'\x01';
 using OverlayTextFn = std::wstring (*)();
 
 void OverlaySetup(OverlayLog log, OverlayTextFn text, PFN_vkGetPhysicalDeviceMemoryProperties mem_props);

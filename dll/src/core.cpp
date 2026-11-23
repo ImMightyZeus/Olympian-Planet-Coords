@@ -3,6 +3,8 @@
 
 #include "core.hpp"
 
+#include "galaxies.hpp"
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -31,6 +33,7 @@ struct Msg {
 const std::map<std::string, Msg> kMessages = {
     {"waiting", {"esperando al juego", "waiting for the game", "ожидание игры"}},
     {"not_on_planet", {"no estas en un planeta", "you're not on a planet", "вы не на планете"}},
+    {"space_station", {"Estacion espacial", "Space station", "Космическая станция"}},
     {"arrived", {"Llegaste a {name}", "You reached {name}", "Вы прибыли: {name}"}},
     {"bad_lang", {"idioma no valido", "invalid language", "недопустимый язык"}},
     {"dest_set", {"Destino: {coords}", "Destination: {coords}", "Цель: {coords}"}},
@@ -56,6 +59,7 @@ bool IsPlanetLocation(int loc) {
     return loc >= 3 && loc <= 8;
 }
 constexpr int kLocDefault = 1;  // en el espacio (orbita posible)
+constexpr int kLocSpaceStation = 2;
 
 std::string FormatCoords(double lat, double lon) {
     char buf[64];
@@ -312,7 +316,8 @@ void Core::Tick(const GameView* view, double now) {
         context_ = nullptr;
         stable_key_.clear();
         snapshot_ = Json{{"ok", true},         {"on_planet", false}, {"in_orbit", false}, {"reason", reason},
-                         {"lat", nullptr},     {"lon", nullptr},     {"destination", nullptr}};
+                         {"lat", nullptr},     {"lon", nullptr},     {"destination", nullptr},
+                         {"place", view ? PlaceLocked(*view, now) : Json(nullptr)}};
     };
     if (!view || !view->have_player_env) return not_ready(T("waiting"));
 
@@ -442,7 +447,69 @@ void Core::Tick(const GameView* view, double now) {
                      {"lat", geo::RoundTo(lat, 2)},
                      {"lon", geo::RoundTo(lon, 2)},
                      {"planet_key", key},
-                     {"destination", dest_info}};
+                     {"destination", dest_info},
+                     {"place", nullptr}};
+}
+
+// ---- donde estas cuando no hay planeta ----------------------------------------------------------
+std::string GalaxyName(int reality) {
+    if (reality >= 0 && reality < kGalaxyCount) return kGalaxyNames[reality];
+    return "#" + std::to_string(reality + 1);
+}
+
+uint64_t UniverseAddress(int reality, int voxel_x, int voxel_y, int voxel_z, int system, int planet) {
+    uint64_t low = (static_cast<uint64_t>(voxel_x) & 0xFFF) | ((static_cast<uint64_t>(voxel_z) & 0xFFF) << 12) |
+                   ((static_cast<uint64_t>(voxel_y) & 0xFF) << 24);
+    uint64_t r = static_cast<uint64_t>(reality < 0 ? 0 : (reality > 0xFF ? 0xFF : reality));
+    uint64_t high = r | ((static_cast<uint64_t>(system) & 0xFFF) << 8) | ((static_cast<uint64_t>(planet) & 0xF) << 20);
+    return low | (high << 32);
+}
+
+void Core::SetNameSource(NameSource names) {
+    std::lock_guard<std::mutex> g(mu_);
+    names_ = std::move(names);
+    name_cache_.clear();
+}
+
+std::string Core::CachedName(int kind, uint64_t ua, double now) {
+    auto key = std::make_pair(kind, ua);
+    auto it = name_cache_.find(key);
+    if (it != name_cache_.end() && now - it->second.second < kNameRefreshSeconds) return it->second.first;
+    const auto& fn = kind == 0 ? names_.system : names_.station;
+    std::string name;
+    if (fn && SettingBool("location_names", true)) name = fn(ua);
+    if (name_cache_.size() > 64) name_cache_.clear();
+    name_cache_[key] = {name, now};
+    return name;
+}
+
+// En una estacion: nombre de la estacion y debajo sistema y galaxia. Volando en el espacio: nombre del
+// sistema y debajo la galaxia. En otros sitios (carguero, Nexus...): null. Igual que _place() de Python.
+Json Core::PlaceLocked(const GameView& v, double now) {
+    const char* kind;
+    if (v.location == kLocSpaceStation)
+        kind = "station";
+    else if (v.location == kLocDefault)
+        kind = "space";
+    else
+        return nullptr;
+    if (!v.have_address) return nullptr;
+    uint64_t ua = UniverseAddress(v.reality, v.voxel_x, v.voxel_y, v.voxel_z, v.system);
+    std::string galaxy = GalaxyName(v.reality);
+    std::string system = CachedName(0, ua, now);
+    std::string station, title, subtitle;
+    if (std::strcmp(kind, "station") == 0) {
+        station = CachedName(1, ua, now);
+        title = station.empty() ? T("space_station") : station;
+        subtitle = system.empty() ? galaxy : system + " \xC2\xB7 " + galaxy;
+    } else if (!system.empty()) {
+        title = system;
+        subtitle = galaxy;
+    } else {
+        title = galaxy;
+    }
+    return Json{{"kind", kind},       {"title", title},   {"subtitle", subtitle},
+                {"station", station}, {"system", system}, {"galaxy", galaxy}};
 }
 
 // ---- respuestas HTTP ------------------------------------------------------------------------

@@ -9,6 +9,7 @@
 // menu), la lectura falla sin romper el juego. Nunca escribe en la memoria del juego.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "core.hpp"
@@ -23,5 +24,7 @@ bool PlausibleView(const GameView& v);
 
 // Lee un puntero (8 bytes) de forma segura; 0 si no se puede.
 uintptr_t ReadPointer(uintptr_t addr);
+// true si se pueden leer n bytes en addr (sin tocar nada).
+bool Readable(uintptr_t addr, size_t n);
 
 }  // namespace olympian

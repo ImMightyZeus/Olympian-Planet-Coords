@@ -101,6 +101,69 @@ LANGS = ("es", "en", "ru")
 _LANG_IDS = {0x0A: "es", 0x19: "ru"}  # idioma principal de Windows (LANGID & 0x3FF); cualquier otro: ingles
 
 
+# Nombres de las 256 galaxias por RealityIndex (0 = Euclid ... 255 = Odyalutai). Dos fuentes
+# independientes coinciden letra por letra: la tabla de nms-core (github.com/oxur/nms-copilot,
+# crates/nms-core/src/galaxy.rs) y la lista de nomansskyrecipes.com (guia de galaxias).
+GALAXY_NAMES = (
+    'Euclid', 'Hilbert Dimension', 'Calypso', 'Hesperius Dimension', 'Hyades', 'Ickjamatew', 'Budullangr',
+    'Kikolgallr', 'Eltiensleen', 'Eissentam', 'Elkupalos', 'Aptarkaba', 'Ontiniangp', 'Odiwagiri',
+    'Ogtialabi', 'Muhacksonto', 'Hitonskyer', 'Rerasmutul', 'Isdoraijung', 'Doctinawyra', 'Loychazinq',
+    'Zukasizawa', 'Ekwathore', 'Yeberhahne', 'Twerbetek', 'Sivarates', 'Eajerandal', 'Aldukesci',
+    'Wotyarogii', 'Sudzerbal', 'Maupenzhay', 'Sugueziume', 'Brogoweldian', 'Ehbogdenbu', 'Ijsenufryos',
+    'Nipikulha', 'Autsurabin', 'Lusontrygiamh', 'Rewmanawa', 'Ethiophodhe', 'Urastrykle', 'Xobeurindj',
+    'Oniijialdu', 'Wucetosucc', 'Ebyeloof', 'Odyavanta', 'Milekistri', 'Waferganh', 'Agnusopwit',
+    'Teyaypilny', 'Zalienkosm', 'Ladgudiraf', 'Mushonponte', 'Amsentisz', 'Fladiselm', 'Laanawemb',
+    'Ilkerloor', 'Davanossi', 'Ploehrliou', 'Corpinyaya', 'Leckandmeram', 'Quulngais', 'Nokokipsechl',
+    'Rinblodesa', 'Loydporpen', 'Ibtrevskip', 'Elkowaldb', 'Heholhofsko', 'Yebrilowisod', 'Husalvangewi',
+    "Ovna'uesed", 'Bahibusey', 'Nuybeliaure', 'Doshawchuc', 'Ruckinarkh', 'Thorettac', 'Nuponoparau',
+    'Moglaschil', 'Uiweupose', 'Nasmilete', 'Ekdaluskin', 'Hakapanasy', 'Dimonimba', 'Cajaccari',
+    'Olonerovo', 'Umlanswick', 'Henayliszm', 'Utzenmate', 'Umirpaiya', 'Paholiang', 'Iaereznika',
+    'Yudukagath', 'Boealalosnj', 'Yaevarcko', 'Coellosipp', 'Wayndohalou', 'Smoduraykl', 'Apmaneessu',
+    'Hicanpaav', 'Akvasanta', 'Tuychelisaor', 'Rivskimbe', 'Daksanquix', 'Kissonlin', 'Aediabiel',
+    'Ulosaginyik', 'Roclaytonycar', 'Kichiaroa', 'Irceauffey', 'Nudquathsenfe', 'Getaizakaal', 'Hansolmien',
+    'Bloytisagra', 'Ladsenlay', 'Luyugoslasr', 'Ubredhatk', 'Cidoniana', 'Jasinessa', 'Torweierf',
+    'Saffneckm', 'Thnistner', 'Dotusingg', 'Luleukous', 'Jelmandan', 'Otimanaso', 'Enjaxusanto',
+    'Sezviktorew', 'Zikehpm', 'Bephembah', 'Broomerrai', 'Meximicka', 'Venessika', 'Gaiteseling',
+    'Zosakasiro', 'Drajayanes', 'Ooibekuar', 'Urckiansi', 'Dozivadido', 'Emiekereks', 'Meykinunukur',
+    'Kimycuristh', 'Roansfien', 'Isgarmeso', 'Daitibeli', 'Gucuttarik', 'Enlaythie', 'Drewweste',
+    'Akbulkabi', 'Homskiw', 'Zavainlani', 'Jewijkmas', 'Itlhotagra', 'Podalicess', 'Hiviusauer', 'Halsebenk',
+    'Puikitoac', 'Gaybakuaria', 'Grbodubhe', 'Rycempler', 'Indjalala', 'Fontenikk', 'Pasycihelwhee',
+    'Ikbaksmit', 'Telicianses', 'Oyleyzhan', 'Uagerosat', 'Impoxectin', 'Twoodmand', 'Hilfsesorbs',
+    'Ezdaranit', 'Wiensanshe', 'Ewheelonc', 'Litzmantufa', 'Emarmatosi', 'Mufimbomacvi', 'Wongquarum',
+    'Hapirajua', 'Igbinduina', 'Wepaitvas', 'Sthatigudi', 'Yekathsebehn', 'Ebedeagurst', 'Nolisonia',
+    'Ulexovitab', 'Iodhinxois', 'Irroswitzs', 'Bifredait', 'Beiraghedwe', 'Yeonatlak', 'Cugnatachh',
+    'Nozoryenki', 'Ebralduri', 'Evcickcandj', 'Ziybosswin', 'Heperclait', 'Sugiuniam', 'Aaseertush',
+    'Uglyestemaa', 'Horeroedsh', 'Drundemiso', 'Ityanianat', 'Purneyrine', 'Dokiessmat', 'Nupiacheh',
+    'Dihewsonj', 'Rudrailhik', 'Tweretnort', 'Snatreetze', 'Iwundaracos', 'Digarlewena', 'Erquagsta',
+    'Logovoloin', 'Boyaghosganh', 'Kuolungau', 'Pehneldept', 'Yevettiiqidcon', 'Sahliacabru', 'Noggalterpor',
+    'Chmageaki', 'Veticueca', 'Vittesbursul', 'Nootanore', 'Innebdjerah', 'Kisvarcini', 'Cuzcogipper',
+    'Pamanhermonsu', 'Brotoghek', 'Mibittara', 'Huruahili', 'Raldwicarn', 'Ezdartlic', 'Badesclema',
+    'Isenkeyan', 'Iadoitesu', 'Yagrovoisi', 'Ewcomechio', 'Inunnunnoda', 'Dischiutun', 'Yuwarugha',
+    'Ialmendra', 'Reponudrle', 'Rinjanagrbo', 'Zeziceloh', 'Oeileutasc', 'Zicniijinis', 'Dugnowarilda',
+    'Neuxoisan', 'Ilmenhorn', 'Rukwatsuku', 'Nepitzaspru', 'Chcehoemig', 'Haffneyrin', 'Uliciawai',
+    'Tuhgrespod', 'Iousongola', 'Odyalutai',
+)
+assert len(GALAXY_NAMES) == 256
+
+
+def galaxy_name(reality: int) -> str:
+    """Nombre de la galaxia para RealityIndex (0-255). Fuera de rango: "#<numero>"."""
+    try:
+        r = int(reality)
+    except (TypeError, ValueError):
+        return ""
+    return GALAXY_NAMES[r] if 0 <= r < 256 else f"#{r + 1}"
+
+
+def universe_address(reality: int, voxel_x: int, voxel_y: int, voxel_z: int, system: int, planet: int = 0) -> int:
+    """Direccion universal de 64 bits, armada como la arma el juego (cGcPlayerState::
+    ClearIsOnOtherSideOfPortal en NMS.exe 185034, antes de cGcNameGenerator::GenerateSpaceStationName):
+    X, Z (12 bits), Y (8 bits), galaxia (8 bits), sistema (12 bits), planeta (4 bits)."""
+    low = (voxel_x & 0xFFF) | ((voxel_z & 0xFFF) << 12) | ((voxel_y & 0xFF) << 24)
+    high = (min(max(reality, 0), 0xFF)) | ((system & 0xFFF) << 8) | ((planet & 0xF) << 20)
+    return low | (high << 32)
+
+
 def system_lang() -> str:
     """Idioma por defecto: OLYMPIAN_LANG si existe; si no, el idioma de Windows; si no, el locale."""
     env = os.environ.get("OLYMPIAN_LANG", "").strip().lower()[:2]
@@ -126,6 +189,11 @@ MESSAGES = {
         "es": "no estas en un planeta",
         "en": "you're not on a planet",
         "ru": "вы не на планете",
+    },
+    "space_station": {
+        "es": "Estacion espacial",
+        "en": "Space station",
+        "ru": "Космическая станция",
     },
     "arrived": {
         "es": "Llegaste a {name}",
@@ -243,6 +311,7 @@ ARRIVAL_METERS = 50.0  # a esta distancia (o menos) se considera que llegaste
 ORBIT_FACTOR = 3.0  # en el espacio, "orbita" = a menos de 3 radios del centro del planeta
 HISTORY_MAX = 10
 STABLE_SECONDS = 1.0  # espera tras cargar / teletransportarse antes de colocar el marcador
+NAME_REFRESH_SECONDS = 3.0  # cada cuanto se vuelve a pedir al juego el nombre del sistema / estacion
 
 # Ubicaciones "sobre el planeta".
 PLANET_LOCATIONS = {
@@ -598,6 +667,74 @@ def application_from_data(data: int):
     return buf, app
 
 
+# Nombres que muestra el juego (NMS.exe 185034, analisis estatico propio). Son funciones del propio juego
+# que se llaman desde el hilo del juego y solo cuando cambia el sistema (o cada pocos segundos):
+# * Nombre del sistema: la funcion que usa el juego para el nombre visible del sistema actual (si el
+#   sistema tiene nombre subido por un jugador, devuelve ese). Sus llamadores hacen
+#   rcx = cGcSimulation.mpSolarSystem, rdx = texto de salida. RVA 0x1678520.
+# * Nombre de la estacion: cGcNameGenerator::GenerateSpaceStationName (rdx = direccion universal del
+#   sistema con planeta 0, r8 = texto de salida; no usa rcx). RVA 0xEA3B70.
+# Antes de llamar se comparan los primeros bytes: si el juego cambia, no se llama nada.
+SYSTEM_NAME_RVA = 0x1678520
+SYSTEM_NAME_HEAD = bytes.fromhex("48895C2408574881ECA0000000488BFA488BD9")
+STATION_NAME_RVA = 0xEA3B70
+STATION_NAME_HEAD = bytes.fromhex("48895C2408488974241048897C241855488DAC2410FCFFFF4881ECF0040000")
+NAME_BUF_BYTES = 0x200  # el juego escribe hasta 0x80; sobra espacio
+
+
+def _c_text(buf) -> str:
+    raw = bytes(buf).split(b"\0", 1)[0]
+    return raw.decode("utf-8", errors="replace").strip()
+
+
+class GameNames:
+    """Pide al juego el nombre del sistema actual y el de su estacion espacial. Si algo no cuadra
+    (bytes distintos, error al llamar) devuelve "" y deja de intentarlo hasta recargar el mod."""
+
+    def __init__(self, base: Optional[int] = None, reader=None):
+        self._base = base
+        self._reader = reader or _read_mem
+        self._fns: dict = {}
+        self.broken = ""  # motivo si se desactivo
+
+    def _fn(self, rva: int, head: bytes, proto):
+        if rva in self._fns:
+            return self._fns[rva]
+        base = _module_base() if self._base is None else self._base
+        fn = None
+        if base and self._reader(base + rva, len(head)) == head:
+            fn = proto(base + rva)
+        else:
+            self.broken = f"bytes distintos en 0x{rva:x}"
+        self._fns[rva] = fn
+        return fn
+
+    def _call(self, rva, head, proto, *args) -> str:
+        if self.broken:
+            return ""
+        fn = self._fn(rva, head, proto)
+        if fn is None:
+            return ""
+        buf = ctypes.create_string_buffer(NAME_BUF_BYTES)
+        try:
+            fn(*args, buf)
+        except Exception as e:  # en Windows ctypes convierte un fallo de acceso en OSError
+            self.broken = f"0x{rva:x}: {e}"
+            logger.exception("No se pudo pedir un nombre al juego; se desactivan los nombres")
+            return ""
+        return _c_text(buf)
+
+    def system_name(self, solar_system: int) -> str:
+        if not solar_system:
+            return ""
+        proto = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
+        return self._call(SYSTEM_NAME_RVA, SYSTEM_NAME_HEAD, proto, ctypes.c_void_p(solar_system))
+
+    def station_name(self, ua: int) -> str:
+        proto = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64, ctypes.c_void_p)
+        return self._call(STATION_NAME_RVA, STATION_NAME_HEAD, proto, None, ctypes.c_uint64(ua))
+
+
 # --------------------------------------------------------------------------------------------
 # Mod
 # --------------------------------------------------------------------------------------------
@@ -628,6 +765,8 @@ class OlympianPlanetCoords(Mod):
         self._app_from_update = False
         self._app_buf = None  # memoria del cGcApplication propio (ver application_from_data)
         self._app_next_try = 0.0
+        self.names = GameNames()  # nombres de sistema y estacion que da el juego
+        self._name_cache: dict = {}  # clave -> (nombre, momento en que se pidio)
 
     # ---- ajustes ---------------------------------------------------------------------------
     @property
@@ -773,7 +912,7 @@ class OlympianPlanetCoords(Mod):
             self._ctx = None
             self._stable_key = None
             self._snapshot = {"ok": True, "on_planet": False, "in_orbit": False, "reason": str(e),
-                              "lat": None, "lon": None, "destination": None}
+                              "lat": None, "lon": None, "destination": None, "place": self._place()}
             return
         lat, lon = vector_to_latlon(ctx["rel"], self.convention, self.invert_lat)
         ctx["lat"], ctx["lon"] = lat, lon
@@ -809,8 +948,77 @@ class OlympianPlanetCoords(Mod):
         self._snapshot = {
             "ok": True, "on_planet": not ctx["in_orbit"], "in_orbit": ctx["in_orbit"], "reason": "",
             "lat": round(lat, 2), "lon": round(lon, 2), "planet_key": ctx["planet_key"],
-            "destination": dest_info,
+            "destination": dest_info, "place": None,
         }
+
+    # ---- donde estas cuando no hay planeta (hilo del juego) ---------------------------------
+    @staticmethod
+    def _location():
+        try:
+            raw = gameData.player_environment.meLocationStable
+            return EnvironmentLocation.Enum(int(getattr(raw, "value", raw)))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _address() -> Optional[tuple]:
+        try:
+            loc = gameData.player_state.mLocation
+            ga = loc.GalacticAddress
+            return (int(loc.RealityIndex), int(ga.VoxelX), int(ga.VoxelY), int(ga.VoxelZ),
+                    int(ga.SolarSystemIndex))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _solar_system_addr() -> int:
+        try:
+            sim = gameData.simulation
+            raw = _read_mem(ctypes.addressof(sim) + nms.cGcSimulation.mpSolarSystem.offset, 8)
+            return int.from_bytes(raw, "little") if raw else 0
+        except Exception:
+            return 0
+
+    def _cached_name(self, key, ask) -> str:
+        """Nombre guardado por clave. Se vuelve a pedir cada NAME_REFRESH_SECONDS: al saltar de sistema
+        el juego puede tardar un momento en tener listo el sistema nuevo."""
+        now = time.monotonic()
+        hit = self._name_cache.get(key)
+        if hit is not None and now - hit[1] < NAME_REFRESH_SECONDS:
+            return hit[0]
+        # Interruptor en datos.json ("location_names": false): no pedir nombres al juego
+        name = (ask() or "") if self.data["settings"].get("location_names", True) is not False else ""
+        if len(self._name_cache) > 64:
+            self._name_cache.clear()
+        self._name_cache[key] = (name, now)
+        return name
+
+    def _place(self) -> Optional[dict]:
+        """En una estacion: nombre de la estacion y debajo sistema y galaxia. Volando en el espacio:
+        nombre del sistema y debajo la galaxia. En otros sitios (carguero, Nexus...): None."""
+        loc = self._location()
+        if loc == EnvironmentLocation.Enum.SpaceStation:
+            kind = "station"
+        elif loc in SPACE_LOCATIONS:
+            kind = "space"
+        else:
+            return None
+        addr = self._address()
+        if addr is None:
+            return None
+        reality, vx, vy, vz, system_index = addr
+        ua = universe_address(reality, vx, vy, vz, system_index)
+        galaxy = galaxy_name(reality)
+        system = self._cached_name(("system", ua), lambda: self.names.system_name(self._solar_system_addr()))
+        if kind == "station":
+            station = self._cached_name(("station", ua), lambda: self.names.station_name(ua))
+            title = station or self.t("space_station")
+            subtitle = " · ".join(x for x in (system, galaxy) if x)
+        else:
+            station = ""
+            title, subtitle = (system, galaxy) if system else (galaxy, "")
+        return {"kind": kind, "title": title, "subtitle": subtitle, "station": station, "system": system,
+                "galaxy": galaxy}
 
     # ---- marcador en el juego (hilo del juego) ---------------------------------------------
     def _target_bigpos(self, lat: float, lon: float):
@@ -1037,6 +1245,7 @@ class OlympianPlanetCoords(Mod):
             "active_marker": bool(self._active),
             "base_building_manager_seen": self._bb_manager_seen,
             "app_from_update": self._app_from_update,
+            "names_disabled": self.names.broken,
             "hotkey": HOTKEY_INPUT,
             "context": {k: (v.name if isinstance(v, IntEnum) else v) for k, v in ctx.items()},
             "raw": self._raw_positions(),
@@ -1091,6 +1300,9 @@ class OlympianPlanetCoords(Mod):
     def gui_current(self):
         s = self._snapshot
         if s.get("lat") is None:
+            place = s.get("place")
+            if place:
+                return place["title"] + (f"  ({place['subtitle']})" if place.get("subtitle") else "")
             return s.get("reason", "")
         return f"{s['lat']:+.2f}, {s['lon']:+.2f}" + (" (orbita)" if s.get("in_orbit") else "")
 

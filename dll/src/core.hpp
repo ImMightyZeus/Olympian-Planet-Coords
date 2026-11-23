@@ -9,7 +9,11 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
+#include <functional>
+#include <map>
 #include <mutex>
+#include <utility>
 #include <string>
 
 #include "geo.hpp"
@@ -19,7 +23,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.2.0-dev.2";  // v0.2 en desarrollo: recuadro de prueba dentro del juego
+constexpr const char* kModVersion = "0.2.0-dev.3";  // v0.2 en desarrollo: recuadro dentro del juego y nombres de lugar
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;
@@ -66,6 +70,20 @@ struct GameView {
 
 std::string Tr(const std::string& key, const std::string& lang);
 
+// Nombre de la galaxia para RealityIndex (0-255); fuera de rango "#<numero>". Igual que galaxy_name().
+std::string GalaxyName(int reality);
+// Direccion universal de 64 bits como la arma el juego (igual que universe_address() de Python).
+uint64_t UniverseAddress(int reality, int voxel_x, int voxel_y, int voxel_z, int system, int planet = 0);
+
+// De donde salen los nombres del sistema y de la estacion (el DLL llama a funciones del juego; las
+// pruebas ponen nombres fijos). Reciben la direccion universal del sistema (planeta 0). Se llaman desde
+// Tick (hilo del juego), solo al cambiar de sistema o cada kNameRefreshSeconds.
+struct NameSource {
+    std::function<std::string(uint64_t ua)> system;
+    std::function<std::string(uint64_t ua)> station;
+};
+constexpr double kNameRefreshSeconds = 3.0;
+
 class Core {
    public:
     // data_path: ruta UTF-8 de datos.json. system_lang: "es", "en" o "ru" (idioma de Windows).
@@ -95,6 +113,8 @@ class Core {
     void KeyState(bool down, bool focused);
     // Datos de diagnostico del marcador (se agregan a /debug).
     void NoteMarkerCall(bool drawn);
+    // Fuente de nombres de sistema y estacion (ver NameSource). Llamar antes del primer Tick.
+    void SetNameSource(NameSource names);
 
    private:
     void Load();
@@ -124,6 +144,10 @@ class Core {
     std::atomic<unsigned long long> marker_drawn_{0};
     std::atomic<unsigned long long> marker_skipped_{0};
     void UpdateHotkeyLocked();
+    Json PlaceLocked(const GameView& v, double now);
+    std::string CachedName(int kind, uint64_t ua, double now);
+    NameSource names_;
+    std::map<std::pair<int, uint64_t>, std::pair<std::string, double>> name_cache_;
     void SetMarkerLocked(const MarkerSpec& m);
 };
 

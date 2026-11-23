@@ -46,6 +46,7 @@ def main():
         "DATA_GAMESTATE": off(D, "mGameState"),
         "SIM_ENVIRONMENT": off(S, "mEnvironment"),
         "SIM_PLAYER": off(S, "mPlayer"),
+        "SIM_SOLAR_SYSTEM": off(S, "mpSolarSystem"),
         "ENV_PLAYERENV": off(E, "mPlayerEnvironment"),
         "PENV_PLAYERTM": off(PE, "mPlayerTM"),
         "PENV_NEAREST_PLANET_INDEX": off(PE, "miNearestPlanetIndex"),

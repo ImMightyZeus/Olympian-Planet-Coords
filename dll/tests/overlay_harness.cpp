@@ -53,7 +53,7 @@ static std::vector<void*> g_maps;
 static bool g_submit_fails = false;
 static int g_begins = 0, g_ends = 0, g_resets = 0;
 static VkImage g_images[3];
-static std::wstring g_text = L"OLYMPIAN PLANET COORDS\n+12.34, -56.78\n→ Torre  · 850 m NE";
+static std::wstring g_text = L"OLYMPIAN PLANET COORDS\n\x01+12.34, -56.78\n» Torre  · 850 m NE";
 
 static void VKAPI_CALL MkGetDeviceQueue(VkDevice, uint32_t fam, uint32_t idx, VkQueue* q) {
     *q = reinterpret_cast<VkQueue>(&g_q[fam == 0 ? idx : 2]);
@@ -169,6 +169,19 @@ static void Log(const char* fmt, ...) {
 }
 static std::wstring Text() { return g_text; }
 
+// OVERLAY_TEXT (UTF-8) cambia el texto de la primera prueba para mirar el recuadro con OVERLAY_DUMP:
+// '|' separa lineas y '^' al inicio de una linea la marca como coordenadas.
+static void TextFromEnv() {
+    const wchar_t* t = _wgetenv(L"OVERLAY_TEXT");
+    if (!t) return;
+    std::wstring w(t);
+    for (auto& c : w) {
+        if (c == L'|') c = L'\n';
+        if (c == L'^') c = kNumericLine;
+    }
+    g_text = w;
+}
+
 static VkResult Present(VkQueue q, VkSwapchainKHR sc, uint32_t idx, VkSemaphore wait) {
     VkPresentInfoKHR pi{};
     pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -188,6 +201,7 @@ static uint32_t Pixel(const uint8_t* map, uint32_t w, uint32_t x, uint32_t y) {
 
 int main() {
     for (auto& i : g_images) i = NewHandle<VkImage>();
+    TextFromEnv();
     OverlaySetup(&Log, &Text, &MemProps);
 
     VkDeviceQueueCreateInfo qci[2]{};

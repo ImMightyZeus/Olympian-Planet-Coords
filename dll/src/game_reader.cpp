@@ -37,6 +37,13 @@ uintptr_t ReadPointer(uintptr_t addr) {
     return Rd(addr, &v) ? v : 0;
 }
 
+bool Readable(uintptr_t addr, size_t n) {
+    if (addr < 0x10000 || n == 0 || n > 0x10000) return false;
+    static thread_local unsigned char tmp[0x10000];
+    SIZE_T got = 0;
+    return ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(addr), tmp, n, &got) && got == n;
+}
+
 bool PlausibleView(const GameView& v) {
     if (!v.have_player_env || v.location < 0 || v.location > 15) return false;
     auto unit = [](const geo::Vec3& a) {

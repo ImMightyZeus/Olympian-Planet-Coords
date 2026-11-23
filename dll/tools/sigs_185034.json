@@ -11,5 +11,9 @@
     {"name": "cGcBaseBuildingManager::Update", "rva": "0x3ba030", "signature": "48 8B C4 F3 0F 11 48 10 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 58 FE FF FF"},
     {"name": "cGcBaseBuildingManager::AddHUDMarker", "rva": "0x3c9a40", "signature": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC E0 02 00 00"},
     {"name": "cTkFSM::StateChange", "rva": "0x2c53c90", "signature": "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 4C 8B 51 08 49 8B E8 4C 8B 1D ?? ?? ?? ?? 48 8B F9 48 8B 35 ?? ?? ?? ??"}
+  ],
+  "optional": [
+    {"name": "cGcSolarSystem::GetDisplayName", "rva": "0x1678520", "signature": "48 89 5C 24 08 57 48 81 EC A0 00 00 00 48 8B FA 48 8B D9 E8 ?? ?? ?? ?? 48 8B C8 48 8B D7 E8 ?? ?? ?? ?? 84 C0 75", "note": "Nombre propio (no oficial): nombre visible del sistema actual (el subido por un jugador si lo hay). rcx = cGcSimulation.mpSolarSystem, rdx = texto de salida (0x80)."},
+    {"name": "cGcNameGenerator::GenerateSpaceStationName", "rva": "0xea3b70", "signature": "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 55 48 8D AC 24 10 FC FF FF 48 81 EC F0 04 00 00 33 DB 48 89 54 24 20", "note": "rdx = direccion universal del sistema (planeta 0), r8 = texto de salida (0x80); no usa rcx. Se ve en cGcPlayerState::ClearIsOnOtherSideOfPortal."}
   ]
 }

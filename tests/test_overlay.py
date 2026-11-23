@@ -195,6 +195,18 @@ assert o.fonts["num"].cget("size") == 15 and json.load(open(sfile))["size"] == "
 o2_settings = ov.load_settings(sfile)
 assert o2_settings["size"] == "grande"
 o.set_size("normal")
+# estacion espacial: nombre de la estacion y debajo, en letra pequena, sistema y galaxia
+off = dict(base, lat=None, lon=None, on_planet=False, reason="no estas en un planeta")
+o._on_coords(dict(off, place={"kind": "station", "title": "Kirsta Hub", "subtitle": "Hamsonde XIV · Eissentam"}))
+assert o._layout == ["message", "place_sub"], o._layout
+assert o.message.cget("text") == "Kirsta Hub" and o.place_sub.cget("text") == "Hamsonde XIV · Eissentam"
+assert o.place_sub.cget("font") == str(o.fonts["small"]) and o.message.cget("font") == str(o.fonts["text"])
+# volando en el espacio: sistema y debajo la galaxia
+o._on_coords(dict(off, place={"kind": "space", "title": "Hamsonde XIV", "subtitle": "Eissentam"}))
+assert o.message.cget("text") == "Hamsonde XIV" and o.place_sub.cget("text") == "Eissentam"
+# sin lugar (carguero, mod viejo): el aviso de siempre
+o._on_coords(dict(off, place=None))
+assert o._layout == ["message"] and o.message.cget("text") == "no estas en un planeta"
 # orbita
 o._on_coords(dict(base, in_orbit=True, on_planet=False, input_request_id=0))
 assert o.orbit_tag.cget("text") == "ÓRBITA"

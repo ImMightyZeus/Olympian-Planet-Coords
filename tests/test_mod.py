@@ -698,6 +698,128 @@ def test_idioma_ingles():
         assert e.code == "parse_format" and "formato" in str(e) and e.text("en").startswith("format:")
 
 
+class FakeNames:
+    """Sustituye las llamadas al juego: cuenta cuantas veces se piden los nombres."""
+
+    def __init__(self, system="Hamsonde XIV", station="Kirsta Hub"):
+        self.system, self.station = system, station
+        self.calls = []
+        self.broken = ""
+
+    def system_name(self, solar_system):
+        self.calls.append(("system", solar_system))
+        return self.system
+
+    def station_name(self, ua):
+        self.calls.append(("station", ua))
+        return self.station
+
+
+def test_galaxias_256_y_direccion_universal():
+    assert len(mod.GALAXY_NAMES) == 256 and len(set(mod.GALAXY_NAMES)) == 256
+    assert mod.galaxy_name(0) == "Euclid" and mod.galaxy_name(9) == "Eissentam"
+    assert mod.galaxy_name(255) == "Odyalutai" and mod.galaxy_name(300) == "#301"
+    # Misma direccion que arma NMS.py (cGcUniverseAddressData.to_UA), con valores negativos incluidos
+    for reality, x, y, z, system, planet in [(0, 10, -3, 400, 7, 0), (9, -2047, 127, 2047, 4095, 5),
+                                             (255, -1, -1, -1, 1, 15)]:
+        ua = nms.cGcUniverseAddressData()
+        ua.RealityIndex = reality
+        ga = ua.GalacticAddress
+        ga.VoxelX, ga.VoxelY, ga.VoxelZ, ga.SolarSystemIndex, ga.PlanetIndex = x, y, z, system, planet
+        assert mod.universe_address(reality, x, y, z, system, planet) == ua.to_UA(), (reality, x, y, z)
+
+
+def test_lugar_en_estacion_y_en_el_espacio():
+    m = make_mod()
+    names = m.names = FakeNames()
+    GAME.state.mLocation.RealityIndex = 9  # Eissentam
+    at(0, 0)
+    tick(m)  # pisar el planeta guarda su radio (hace falta para la orbita)
+    GAME.set_location(EnvironmentLocation.Enum.SpaceStation)
+    at(10, 20)
+    tick(m)
+    s = m.http_coords
+    assert s["lat"] is None and s["reason"] == "no estas en un planeta", s
+    assert s["place"] == {"kind": "station", "title": "Kirsta Hub", "subtitle": "Hamsonde XIV · Eissentam",
+                          "station": "Kirsta Hub", "system": "Hamsonde XIV", "galaxy": "Eissentam"}, s["place"]
+    ua = mod.universe_address(9, 10, -3, 400, 7)
+    assert ("station", ua) in names.calls
+    n = len(names.calls)
+    tick(m, 5)
+    assert len(names.calls) == n, "no se pide al juego en cada frame"
+    # Volando lejos de los planetas: sistema y debajo la galaxia
+    GAME.set_location(EnvironmentLocation.Enum.Default)
+    at(10, 20, alt=50000)
+    tick(m)
+    p = m.http_coords["place"]
+    assert p["kind"] == "space" and p["title"] == "Hamsonde XIV" and p["subtitle"] == "Eissentam", p
+    # Cerca de un planeta (orbita) siguen las coordenadas
+    at(10, 20, alt=4000)
+    tick(m)
+    s = m.http_coords
+    assert s["in_orbit"] and s["place"] is None, s
+    # Carguero: ni coordenadas ni nombres
+    GAME.set_location(EnvironmentLocation.Enum.Freighter)
+    tick(m)
+    assert m.http_coords["place"] is None
+    # Sin nombre del juego: textos de reserva
+    m2 = make_mod()
+    m2.names = FakeNames(system="", station="")
+    GAME.state.mLocation.RealityIndex = 9
+    GAME.set_location(EnvironmentLocation.Enum.SpaceStation)
+    tick(m2)
+    p = m2.http_coords["place"]
+    assert p["title"] == "Estacion espacial" and p["subtitle"] == "Eissentam", p
+    GAME.set_location(EnvironmentLocation.Enum.Default)
+    tick(m2)
+    p = m2.http_coords["place"]
+    assert p["title"] == "Eissentam" and p["subtitle"] == "", p
+    assert "Eissentam" in m2.gui_current
+    GAME.state.mLocation.RealityIndex = 0
+
+
+def test_nombres_del_juego_llamada_real_por_ctypes():
+    """Llama de verdad, por ctypes, a una funcion C (un callback) colocada donde estaria la del juego:
+    comprueba que la direccion universal y el texto de salida viajan bien y que, si los bytes del
+    juego no coinciden, no se llama nada."""
+    got = {}
+    station_t = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint64, ctypes.c_void_p)
+    system_t = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
+
+    def station_impl(_unused, ua, out):
+        got["ua"] = ua
+        ctypes.memmove(out, "Kirsta Hub ñ".encode() + b"\0", 14)
+
+    def system_impl(this, out):
+        got["this"] = this
+        ctypes.memmove(out, b"Hamsonde XIV\0", 13)
+
+    st_cb, sy_cb = station_t(station_impl), system_t(system_impl)
+    st_addr = ctypes.cast(st_cb, ctypes.c_void_p).value
+    sy_addr = ctypes.cast(sy_cb, ctypes.c_void_p).value
+
+    def fake_reader(base_st, base_sy):
+        def rd(addr, size):
+            if addr == base_st + mod.STATION_NAME_RVA:
+                return mod.STATION_NAME_HEAD[:size]
+            if addr == base_sy + mod.SYSTEM_NAME_RVA:
+                return mod.SYSTEM_NAME_HEAD[:size]
+            return b"\0" * size
+        return rd
+
+    gn = mod.GameNames(base=st_addr - mod.STATION_NAME_RVA,
+                       reader=fake_reader(st_addr - mod.STATION_NAME_RVA, -1))
+    ua = mod.universe_address(9, -5, 3, 77, 300)
+    assert gn.station_name(ua) == "Kirsta Hub ñ" and got["ua"] == ua and not gn.broken
+    gn2 = mod.GameNames(base=sy_addr - mod.SYSTEM_NAME_RVA, reader=fake_reader(-1, sy_addr - mod.SYSTEM_NAME_RVA))
+    assert gn2.system_name(0x1234560) == "Hamsonde XIV" and got["this"] == 0x1234560
+    assert gn2.system_name(0) == ""
+    # Bytes distintos (otra version del juego): no llama y queda desactivado
+    bad = mod.GameNames(base=0x140000000, reader=lambda a, n: b"\xcc" * n)
+    assert bad.station_name(ua) == "" and bad.broken
+    assert bad.system_name(0x10) == ""
+
+
 if __name__ == "__main__":
     fails = 0
     t0 = time.time()

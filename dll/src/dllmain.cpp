@@ -49,13 +49,14 @@
 #include "core.hpp"
 #include "game_reader.hpp"
 #include "http_server.hpp"
+#include "nms_offsets.h"
 #include "nms_sigs.h"
 #include "routes.hpp"
 #include "vk_overlay.hpp"
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.2"
+#define OLYMPIAN_VERSION "0.2.0-dev.3"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -100,6 +101,20 @@ using BbmUpdateFn = void (*)(void*, float);
 BbmUpdateFn g_orig_bbm_update = nullptr;
 using AddHudMarkerFn = void (*)(void*, int, const void*, int, const char*);
 AddHudMarkerFn g_add_hud_marker = nullptr;
+
+// Nombres que da el juego (opcionales, ver kNmsOptSigs). Se llaman solo desde Tick (hilo del juego).
+using SystemNameFn = void (*)(void* solar_system, char* out);
+using StationNameFn = void (*)(void* unused, uint64_t ua, char* out);
+SystemNameFn g_system_name = nullptr;
+StationNameFn g_station_name = nullptr;
+constexpr size_t kNameBuf = 0x200;  // el juego escribe hasta 0x80
+
+std::string NameFromBuf(const char* buf) {
+    size_t n = strnlen(buf, kNameBuf - 1);
+    std::string r(buf, n);
+    while (!r.empty() && (r.back() == ' ' || r.back() == '\t')) r.pop_back();
+    return r;
+}
 std::atomic<unsigned long long> g_bbm_frames{0};
 
 struct alignas(16) Vec3f {
@@ -392,12 +407,16 @@ std::wstring BoxText() {
     std::string l2, l3;
     char buf[160];
     if (s.contains("lat") && s["lat"].is_number() && s.contains("lon") && s["lon"].is_number()) {
-        snprintf(buf, sizeof(buf), "%+.2f, %+.2f", s["lat"].get<double>(), s["lon"].get<double>());
-        l2 = buf;
+        snprintf(buf, sizeof(buf), "\x01%+.2f, %+.2f", s["lat"].get<double>(), s["lon"].get<double>());
+        l2 = buf;  // \x01 = linea de coordenadas (digitos en DSEG7, ver vk_overlay.hpp)
         if (s.value("in_orbit", false))
             l2 += lang == "es"   ? " \xC2\xB7 en \xC3\xB3rbita"
                   : lang == "ru" ? " \xC2\xB7 \xD0\xBD\xD0\xB0 \xD0\xBE\xD1\x80\xD0\xB1\xD0\xB8\xD1\x82\xD0\xB5"  // на орбите
                                  : " \xC2\xB7 in orbit";
+    } else if (s.contains("place") && s["place"].is_object() && s["place"].value("title", "") != "") {
+        // En una estacion: estacion y debajo, mas pequeno, sistema y galaxia. En el espacio: sistema y galaxia.
+        l2 = s["place"].value("title", "");
+        l3 = s["place"].value("subtitle", "");
     } else {
         l2 = s.contains("reason") && s["reason"].is_string() ? s["reason"].get<std::string>() : "";
     }
@@ -412,7 +431,7 @@ std::wstring BoxText() {
         if (m < 1000) snprintf(buf, sizeof(buf), "%.0f m", m);
         else snprintf(buf, sizeof(buf), "%.1f km", m / 1000);
         std::string card = d.contains("cardinal") && d["cardinal"].is_string() ? d["cardinal"].get<std::string>() : "";
-        l3 = "\xE2\x86\x92 " + name + " \xC2\xB7 " + buf + (card.empty() ? "" : " " + card);
+        l3 = "\xC2\xBB " + name + " \xC2\xB7 " + buf + (card.empty() ? "" : " " + card);
     }
     return Wide("OLYMPIAN PLANET COORDS\n" + l2 + "\n" + l3);
 }
@@ -492,6 +511,36 @@ DWORD WINAPI Worker(LPVOID) {
     CreateDirectoryW(ddir.c_str(), nullptr);
     std::string data_path = Utf8(ddir + L"\\datos.json");
     g_core = std::make_unique<olympian::Core>(data_path, SystemLang());
+    // Nombres de sistema y estacion (opcional: si no se encuentran, se muestran sistema/galaxia de reserva).
+    {
+        int c1 = 0, c2 = 0;
+        uintptr_t a1 = FindPattern(ParsePattern(kNmsOptSigs[OPT_cGcSolarSystem_GetDisplayName].pattern), &c1);
+        uintptr_t a2 = FindPattern(ParsePattern(kNmsOptSigs[OPT_cGcNameGenerator_GenerateSpaceStationName].pattern), &c2);
+        if (a1 && c1 == 1) g_system_name = reinterpret_cast<SystemNameFn>(a1);
+        if (a2 && c2 == 1) g_station_name = reinterpret_cast<StationNameFn>(a2);
+        Log("Nombres del juego: sistema %s (rva=0x%llx), estacion %s (rva=0x%llx)", g_system_name ? "OK" : "NO",
+            static_cast<unsigned long long>(g_system_name ? a1 - base : 0), g_station_name ? "OK" : "NO",
+            static_cast<unsigned long long>(g_station_name ? a2 - base : 0));
+        olympian::NameSource ns;
+        if (g_system_name)
+            ns.system = [](uint64_t) -> std::string {
+                uintptr_t app = g_app_valid.load();
+                uintptr_t data = app ? olympian::ReadPointer(app + nmsoff::APP_MPDATA) : 0;
+                uintptr_t solar = data ? olympian::ReadPointer(data + nmsoff::DATA_SIMULATION + nmsoff::SIM_SOLAR_SYSTEM) : 0;
+                // cGcSolarSystem completo legible (0x523E70 bytes no; basta con sus datos y nombre: 0x2700)
+                if (!solar || !olympian::Readable(solar, 0x2700)) return "";
+                char buf[kNameBuf] = {0};
+                g_system_name(reinterpret_cast<void*>(solar), buf);
+                return NameFromBuf(buf);
+            };
+        if (g_station_name)
+            ns.station = [](uint64_t ua) -> std::string {
+                char buf[kNameBuf] = {0};
+                g_station_name(nullptr, ua, buf);
+                return NameFromBuf(buf);
+            };
+        g_core->SetNameSource(std::move(ns));
+    }
     g_core_box = g_core.get();
     Log("Datos: %s  idioma=%s", data_path.c_str(), g_core->Lang().c_str());
 

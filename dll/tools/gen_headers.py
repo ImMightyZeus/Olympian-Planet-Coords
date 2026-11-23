@@ -31,6 +31,12 @@ FUNCTIONS = [
     "cTkFSM::StateChange",  # su "this" es cGcApplication (como hace NMS.py); Update no recibe el puntero
 ]
 
+# Opcionales: si no aparecen, el mod funciona igual (solo faltan los nombres de sistema y estacion).
+OPTIONAL = [
+    "cGcSolarSystem::GetDisplayName",  # nombre propio, no oficial (ver sigs_<build>.json)
+    "cGcNameGenerator::GenerateSpaceStationName",
+]
+
 
 def c_ident(name: str) -> str:
     return name.replace("::", "_")
@@ -53,6 +59,15 @@ def gen_sigs(build: str) -> str:
     lines += [f"    FN_{c_ident(n)}," for n in FUNCTIONS]
     lines += ["    FN_COUNT", "};", "static const NmsSig kNmsSigs[FN_COUNT] = {"]
     lines += [f'    {{"{n}", "{by_name[n]["signature"].strip()}"}},' for n in FUNCTIONS]
+    lines += ["};", ""]
+    opt = {f["name"]: f for f in data.get("optional", [])}
+    missing = [n for n in OPTIONAL if n not in opt]
+    if missing:
+        raise SystemExit(f"Faltan opcionales en sigs_{build}.json: {missing}")
+    lines += ["// Opcionales: si no se encuentran, solo faltan los nombres de sistema y estacion.", "enum NmsOptFn {"]
+    lines += [f"    OPT_{c_ident(n)}," for n in OPTIONAL]
+    lines += ["    OPT_COUNT", "};", "static const NmsSig kNmsOptSigs[OPT_COUNT] = {"]
+    lines += [f'    {{"{n}", "{opt[n]["signature"].strip()}"}},' for n in OPTIONAL]
     lines += ["};", ""]
     return "\n".join(lines)
 

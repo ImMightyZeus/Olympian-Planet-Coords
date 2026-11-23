@@ -74,7 +74,7 @@ static olympian::GameView ViewFrom(const Json& f) {
     v.nearest_planet_pos = V(f["center"]);
     v.nearest_planet_index = f.value("planet_index", 1);
     v.have_address = f.value("have_address", true);
-    v.reality = 0;
+    v.reality = f.value("reality", 0);
     v.voxel_x = 10;
     v.voxel_y = -3;
     v.voxel_z = 7;
@@ -85,6 +85,7 @@ static olympian::GameView ViewFrom(const Json& f) {
 
 static int RunCore(const std::string& path, const std::string& system_lang = "es") {
     olympian::Core core(path, system_lang);
+    int name_calls = 0;
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line.empty()) continue;
@@ -92,6 +93,31 @@ static int RunCore(const std::string& path, const std::string& system_lang = "es
         if (f.contains("put")) {
             Json q = f.value("query", Json::object());
             std::cout << core.Put(f["put"], q) << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("names")) {  // nombres fijos de sistema y estacion (en el DLL los da el juego)
+            std::string sys = f["names"].value("system", ""), st = f["names"].value("station", "");
+            core.SetNameSource(olympian::NameSource{
+                [&name_calls, sys](uint64_t) { ++name_calls; return sys; },
+                [&name_calls, st](uint64_t ua) {
+                    ++name_calls;
+                    char buf[32];
+                    std::snprintf(buf, sizeof(buf), "%llx", static_cast<unsigned long long>(ua));
+                    return st == "ua" ? std::string(buf) : st;
+                }});
+            std::cout << Json{{"ok", true}}.dump() << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("name_calls")) {
+            std::cout << Json{{"name_calls", name_calls}}.dump() << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("galaxy")) {  // tabla de galaxias y direccion universal
+            Json out = Json::array();
+            for (int i = -1; i <= 256; ++i) out.push_back(olympian::GalaxyName(i));
+            const Json& a = f["galaxy"];
+            uint64_t ua = olympian::UniverseAddress(a[0], a[1], a[2], a[3], a[4], a[5]);
+            std::cout << Json{{"names", out}, {"ua", std::to_string(ua)}}.dump() << "\n" << std::flush;
             continue;
         }
         if (f.contains("key")) {  // estado de la tecla en un frame

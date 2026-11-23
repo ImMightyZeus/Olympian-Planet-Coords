@@ -19,12 +19,17 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cwctype>
 #include <map>
 #include <mutex>
 #include <string>
 #include <vector>
 
 namespace olympian {
+// Fuentes incluidas en el DLL (src/fonts.S).
+extern "C" const unsigned char olympian_font_dseg7[], olympian_font_dseg7_end[];
+extern "C" const unsigned char olympian_font_sharetech[], olympian_font_sharetech_end[];
+
 namespace {
 
 constexpr uint32_t kFrames = 4;                     // comandos en vuelo
@@ -144,6 +149,33 @@ void BoxSize(VkExtent2D e, uint32_t* w, uint32_t* h, double* scale) {
 }
 
 // Dibuja el recuadro con GDI en un DIB de 32 bits y lo convierte al orden de la cadena.
+// Fuentes privadas del proceso (no se instalan en Windows). Se cargan una vez.
+bool g_fonts_tried = false, g_font_num = false, g_font_text = false;
+void EnsureFonts() {
+    if (g_fonts_tried) return;
+    g_fonts_tried = true;
+    DWORD n = 0;
+    g_font_num = AddFontMemResourceEx(const_cast<unsigned char*>(olympian_font_dseg7),
+                                      static_cast<DWORD>(olympian_font_dseg7_end - olympian_font_dseg7), nullptr, &n) &&
+                 n > 0;
+    n = 0;
+    g_font_text = AddFontMemResourceEx(const_cast<unsigned char*>(olympian_font_sharetech),
+                                       static_cast<DWORD>(olympian_font_sharetech_end - olympian_font_sharetech),
+                                       nullptr, &n) &&
+                  n > 0;
+    if (g_log) g_log("[overlay] fuentes: DSEG7 Classic %s, Share Tech Mono %s", g_font_num ? "OK" : "NO",
+                     g_font_text ? "OK" : "NO");
+}
+
+const wchar_t* NumFamily() { return g_font_num ? L"DSEG7 Classic" : L"Consolas"; }
+
+// Texto con cirilico: Consolas (Share Tech Mono no lo tiene). Si no, Share Tech Mono.
+const wchar_t* TextFamily(const std::wstring& t) {
+    for (wchar_t c : t)
+        if (c >= 0x0400 && c <= 0x04FF) return L"Consolas";
+    return g_font_text ? L"Share Tech Mono" : L"Consolas";
+}
+
 void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool bgra) {
     g_raster.text = text;
     g_raster.w = w;
@@ -175,6 +207,7 @@ void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool 
             p[y * w + x] = bar ? accent : border ? edge : bg;
         }
     SetBkMode(dc, TRANSPARENT);
+    EnsureFonts();
     std::vector<std::wstring> lines;
     size_t a = 0;
     for (;;) {
@@ -183,22 +216,63 @@ void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool 
         if (b == std::wstring::npos || lines.size() == 3) break;
         a = b + 1;
     }
-    const int sizes[3] = {14, 24, 17};
+    // Mismo estilo que el recuadro .exe: numeros en DSEG7 Classic y texto en Share Tech Mono (en ruso,
+    // Consolas: Share Tech Mono no trae cirilico). Linea 1 titulo, linea 2 grande, linea 3 pequena.
+    const int sizes[3] = {14, 24, 16};
     const COLORREF colors[3] = {RGB(232, 163, 61), RGB(240, 240, 240), RGB(176, 176, 176)};
-    const int weights[3] = {FW_BOLD, FW_SEMIBOLD, FW_NORMAL};
     int y = static_cast<int>(std::lround(8 * s));
-    const int x = static_cast<int>(std::lround(14 * s));
+    const int x0 = static_cast<int>(std::lround(14 * s));
     for (size_t i = 0; i < lines.size(); ++i) {
+        std::wstring line = lines[i];
+        bool numeric = !line.empty() && line[0] == kNumericLine;  // coordenadas: digitos en DSEG7
+        if (numeric) line.erase(0, 1);
         int px = static_cast<int>(std::lround(sizes[i] * s));
-        HFONT f = CreateFontW(-px, 0, 0, 0, weights[i], 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                              CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-        HGDIOBJ of = SelectObject(dc, f);
+        HFONT ft = CreateFontW(-px, 0, 0, 0, i == 0 ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+                               OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FIXED_PITCH,
+                               TextFamily(line));
+        HFONT fn = numeric ? CreateFontW(-static_cast<int>(std::lround(px * 0.86)), 0, 0, 0, FW_BOLD, 0, 0, 0,
+                                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                         ANTIALIASED_QUALITY, DEFAULT_PITCH, NumFamily())
+                           : nullptr;
+        HGDIOBJ of = SelectObject(dc, ft);
         SetTextColor(dc, colors[i]);
-        RECT r{x, y, static_cast<LONG>(w) - x / 2, static_cast<LONG>(h)};
-        DrawTextW(dc, lines[i].c_str(), static_cast<int>(lines[i].size()), &r,
-                  DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        TEXTMETRICW tm{};
+        GetTextMetricsW(dc, &tm);
+        const int baseline = y + tm.tmAscent;
+        SetTextAlign(dc, TA_LEFT | TA_BASELINE | TA_NOUPDATECP);
+        int x = x0;
+        const int right = static_cast<int>(w) - x0 / 2;
+        // Letras que la fuente de texto no tiene (flechas, otros alfabetos en nombres puestos por
+        // jugadores): esas van en Segoe UI, que Windows completa con sus fuentes de reserva.
+        std::vector<WORD> glyphs(line.size() + 1, 0);
+        if (!line.empty())
+            GetGlyphIndicesW(dc, line.c_str(), static_cast<int>(line.size()), glyphs.data(), GGI_MARK_NONEXISTING_GLYPHS);
+        HFONT fb = nullptr;
+        auto cls = [&](size_t k) {  // 0 = digito DSEG7, 1 = fuente de texto, 2 = reserva
+            if (numeric && fn && (iswdigit(line[k]) || line[k] == L'.')) return 0;
+            return glyphs[k] == 0xFFFF ? 2 : 1;
+        };
+        // Tramos: digitos y punto en DSEG7, lo demas (signos, coma, texto) en la fuente de texto.
+        size_t k = 0;
+        while (k < line.size() && x < right) {
+            int c = cls(k);
+            size_t e = k + 1;
+            while (e < line.size() && cls(e) == c) ++e;
+            if (c == 2 && !fb)
+                fb = CreateFontW(-px, 0, 0, 0, i == 0 ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                 CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+            SelectObject(dc, c == 0 ? fn : c == 2 && fb ? fb : ft);
+            SIZE sz{};
+            GetTextExtentPoint32W(dc, line.c_str() + k, static_cast<int>(e - k), &sz);
+            RECT clip{x, y, right, static_cast<LONG>(h)};
+            ExtTextOutW(dc, x, baseline, ETO_CLIPPED, &clip, line.c_str() + k, static_cast<UINT>(e - k), nullptr);
+            x += sz.cx + (c == 0 ? static_cast<int>(std::lround(2 * s)) : 0);
+            k = e;
+        }
+        if (fb) DeleteObject(fb);
         SelectObject(dc, of);
-        DeleteObject(f);
+        DeleteObject(ft);
+        if (fn) DeleteObject(fn);
         y += static_cast<int>(std::lround((sizes[i] + 7) * s));
     }
     GdiFlush();
