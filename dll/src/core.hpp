@@ -23,7 +23,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.2.0-dev.3";  // v0.2 en desarrollo: recuadro dentro del juego y nombres de lugar
+constexpr const char* kModVersion = "0.2.0-dev.4";  // v0.2 en desarrollo: panel dentro del juego con el teclado
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;

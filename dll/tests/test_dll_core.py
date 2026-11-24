@@ -20,6 +20,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -46,7 +47,7 @@ py = load(os.path.join(ROOT, "mod", "OlympianPlanetCoords.py"), "OlympianPlanetC
 ov = load(os.path.join(ROOT, "overlay", "olympian_overlay.py"), "olympian_overlay_ref")
 
 BUILD = tempfile.mkdtemp(prefix="opc_dll_")
-SRCS = ["tests/core_harness.cpp", "src/core.cpp", "src/http_server.cpp"]
+SRCS = ["tests/core_harness.cpp", "src/core.cpp", "src/http_server.cpp", "src/ingame_ui.cpp"]
 FLAGS = ["-O1", "-std=c++17", "-Wall", "-Wextra", "-Isrc", "-Ithird_party"]
 
 
@@ -140,7 +141,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.3" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.4" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -470,6 +471,113 @@ def test_lugar_estacion_y_espacio_igual_que_python(exe):
     h.close()
 
 
+@test
+def test_panel_lectura_de_coordenadas_igual_que_python(exe):
+    """El panel lee lo escrito igual que parse_coords() de Python (y del recuadro .exe)."""
+    h = Harness([exe, "core", os.path.join(tempfile.mkdtemp(), "datos.json")])
+    casos = ["+12.34, -56.78", "12.34,-56.78", "12.34 -56.78", "  -1 2  ", "12,34; -56,78", "12,34;-56,78 Torre",
+             "12.5, -40 Torre Ñandú", "12.5, -40, Mi base", "90, 180", "-90.00, -180.00", "90.01, 0", "0, 180.5",
+             "abc", "", "12", "12.34; ", "1e3, 2", "+-1, 2", "12.34 , -56.78 ,  nombre con  espacios  ",
+             "12.3.4, 5", "５, 6", "５, ６.５ Base", "12.34;-56.78;Base", "\t7\t8\t"]
+    rnd = random.Random(7)
+    for _ in range(300):
+        casos.append("".join(rnd.choice("0123456789.,;-+ aZ") for _ in range(rnd.randint(0, 14))))
+    for c in casos:
+        got = h.ask({"parse": c})
+        try:
+            lat, lon, name = py.parse_coords(c)
+            want = {"ok": True, "lat": lat, "lon": lon, "name": name, "error": ""}
+        except py.CoordsError as e:
+            want = {"ok": False, "error": e.code}
+        if want["ok"]:
+            assert got["ok"] and abs(got["lat"] - want["lat"]) < 1e-12 and abs(got["lon"] - want["lon"]) < 1e-12 \
+                and got["name"] == want["name"], (c, got, want)
+        else:
+            assert not got["ok"] and got["error"] == want["error"], (c, got, want)
+    h.close()
+
+
+@test
+def test_panel_destinos_lista_y_ajustes(exe):
+    """Panel dentro del juego con el teclado: escribir, fijar, lista (ir / quitar), ajustes, errores."""
+    path = os.path.join(tempfile.mkdtemp(), "datos.json")
+    h = Harness([exe, "core", path])
+    h.ask(frame(12.0, -45.0, 0))
+    h.ask(frame(12.0, -45.0, 2.0))  # posicion estable: se puede fijar destino
+    r = h.ask({"panel": "open"})
+    assert r["open"] and r["input"] == "" and r["page"] == 0 and r["sel"] == -1
+    lines = r["text"].split("\n")
+    assert lines[0] == "\x10OLYMPIAN PLANET COORDS · DESTINO", lines
+    assert lines[1] == "\x11\x01+12.00, -45.00", lines
+    assert "\x17> _" in lines and "\x16Todavia no hay destinos guardados" in lines, lines
+    # error de formato: se queda abierto y avisa
+    r = h.ask({"panel": "", "keys": ["hola", "Enter"]})
+    assert r["open"] and r["text"].endswith("\x15" + "formato: usa  +12.34, -56.78  (o 12,34; -56,78)"), r["text"]
+    r = h.ask({"panel": "", "keys": ["Back", "Back", "Back", "Back", "95, 3", "Enter"]})
+    assert r["open"] and r["text"].endswith("\x15latitud fuera de rango (-90..90)"), r["text"]
+    # destino bueno: se fija y el panel se cierra
+    r = h.ask({"panel": "", "keys": ["Back"] * 5 + ["12.5, -40 Torre Ñ", "Enter"]})
+    assert not r["open"], r
+    s = h.ask(frame(12.0, -45.0, 2.1))
+    assert s["destination"]["lat"] == 12.5 and s["destination"]["name"] == "Torre Ñ", s["destination"]
+    # segundo destino y lista: el mas reciente arriba
+    h.ask({"panel": "open", "keys": ["-3, 7", "Enter"]})
+    r = h.ask({"panel": "open"})
+    lines = r["text"].split("\n")
+    assert "\x16Destinos guardados" in lines and "\x13  -3.00, +7.00" in lines and "\x13  +12.50, -40.00  Torre Ñ" in lines, lines
+    # flechas: elegir el segundo (Torre) e ir
+    r = h.ask({"panel": "", "keys": ["Down", "Down"]})
+    assert r["sel"] == 1 and "\x14» +12.50, -40.00  Torre Ñ   [Enter: ir]  [Supr: quitar]" in r["text"].split("\n"), r
+    r = h.ask({"panel": "", "keys": ["Enter"]})
+    assert not r["open"]
+    s = h.ask(frame(12.0, -45.0, 2.2))
+    assert s["destination"]["name"] == "Torre Ñ" and s["history"][0]["name"] == "Torre Ñ", s
+    # Supr en la lista: lo quita (y si es el destino, tambien el destino)
+    r = h.ask({"panel": "open", "keys": ["Down", "Del"]})
+    assert r["open"] and "\x18" in r["text"], r["text"]
+    s = h.ask(frame(12.0, -45.0, 2.3))
+    assert len(s["history"]) == 1 and s["destination"] is None, s
+    # tras quitar, la eleccion pasa a la fila siguiente; flecha arriba vuelve a la casilla y otra vez al ultimo
+    r = h.ask({"panel": "", "keys": []})
+    assert r["sel"] == 0, r
+    r = h.ask({"panel": "", "keys": ["Up"]})
+    assert r["sel"] == -1, r
+    r = h.ask({"panel": "", "keys": ["Up"]})
+    assert r["sel"] == 0, r
+    r = h.ask({"panel": "", "keys": ["x"]})
+    assert r["sel"] == -1 and r["input"] == "x"
+    # Ajustes: idioma y tecla al momento
+    r = h.ask({"panel": "", "keys": ["Tab"]})
+    assert r["page"] == 1 and "\x14» Idioma: ‹ Español ›" in r["text"].split("\n"), r["text"]
+    r = h.ask({"panel": "", "keys": ["Right"]})
+    assert "LANGUAGE" not in r["text"] and "\x14» Language: ‹ English ›" in r["text"].split("\n"), r["text"]
+    assert r["text"].split("\n")[0] == "\x10OLYMPIAN PLANET COORDS · SETTINGS"
+    r = h.ask({"panel": "", "keys": ["Left", "Down", "Right"]})
+    assert "\x14» Tecla del panel: ‹ F10 ›" in r["text"].split("\n"), r["text"]
+    s = h.ask(frame(12.0, -45.0, 2.4))
+    assert s["hotkey"] == "f10" and s["lang"] == "es", s
+    # "ninguna" no se ofrece en el panel (sin tecla no se podria volver a abrir): F11 -> F5
+    r = h.ask({"panel": "", "keys": ["Right", "Right"]})
+    assert "‹ F5 ›" in r["text"], r["text"]
+    # quitar destino de este planeta (no hay): aviso
+    r = h.ask({"panel": "", "keys": ["Down", "Enter"]})
+    assert r["text"].split("\n")[-1].startswith("\x15"), r["text"]
+    # Esc cierra; Tab vuelve a destinos al abrir de nuevo
+    r = h.ask({"panel": "", "keys": ["Esc"]})
+    assert not r["open"] and r["text"] == ""
+    r = h.ask({"panel": "toggle"})
+    assert r["open"] and r["page"] == 0 and r["input"] == ""
+    # lo escrito no pasa de 80 letras
+    r = h.ask({"panel": "", "keys": ["1" * 100]})
+    assert len(r["input"]) == 80
+    # fuera de un planeta: no fija y avisa con el motivo
+    h.ask({"panel": "close"})
+    h.ask(frame(12.0, -45.0, 3.0, location=9))
+    r = h.ask({"panel": "open", "keys": ["1, 2", "Enter"]})
+    assert r["open"] and r["text"].split("\n")[-1].startswith("\x15"), r["text"]
+    h.close()
+
+
 def check_server_with_overlay_client(port):
     client = ov.ModClient("127.0.0.1", port)
     s = client.get_coords()
@@ -590,6 +698,8 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         assert "Hook cGcBaseBuildingManager::Update (marcador del HUD): MH_OK" in log, log
         # el NMS falso no trae las funciones de nombres (opcionales): el mod sigue igual sin ellas
         assert "Nombres del juego: sistema NO (rva=0x0), estacion NO (rva=0x0)" in log, log
+        # teclado del panel: al menos los 4 de user32 (el NMS falso no carga xinput9_1_0)
+        assert re.search(r"Teclado del panel: [45] de 5 enganches", log), log
         # sonda de Vulkan: engancha el cargador y ve pasar la instancia que crea el "juego"
         assert "[vk] gancho vkQueuePresentKHR: MH_OK" in log, log
         if "vkCreateInstance=no_loader" not in out:
@@ -608,6 +718,34 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         if p.poll() is None:
             p.terminate()
             p.wait(timeout=10)
+
+
+@test
+def test_teclado_del_panel_bajo_wine(exe):
+    """Teclas de Raw Input -> panel, teclas vacias para el juego y enganches reales (MinHook) bajo Wine."""
+    if not (shutil.which("wine") and shutil.which("x86_64-w64-mingw32-g++")):
+        print("   (sin wine/mingw: se omite)")
+        return
+    out = os.path.join(BUILD, "input_harness.exe")
+    objs = []
+    for f in ("buffer", "hook", "trampoline"):
+        o = os.path.join(BUILD, f"mh_{f}.o")
+        subprocess.run(["x86_64-w64-mingw32-gcc", "-O2", "-c", f"third_party/src/{f}.c", "-Ithird_party/include", "-o", o],
+                       cwd=DLL, check=True)
+        objs.append(o)
+    o = os.path.join(BUILD, "mh_hde64.o")
+    subprocess.run(["x86_64-w64-mingw32-gcc", "-O2", "-c", "third_party/src/hde/hde64.c", "-o", o], cwd=DLL, check=True)
+    objs.append(o)
+    subprocess.run(["x86_64-w64-mingw32-g++", "-O1", "-std=c++17", "-Wall", "-Wextra", "-Isrc", "-Ithird_party",
+                    "-Ithird_party/include", "tests/input_harness.cpp", "src/input_hook.cpp", *objs, "-o", out,
+                    "-static"], cwd=DLL, check=True)
+    cmd = ["wine", out]
+    if shutil.which("xvfb-run") and not os.environ.get("DISPLAY"):
+        cmd = ["xvfb-run", "-a", *cmd]
+    r = subprocess.run(cmd, cwd=DLL, capture_output=True, text=True, timeout=180,
+                       env=dict(os.environ, WINEDEBUG="-all"))
+    print("   " + r.stdout.strip().replace("\n", "\n   "))
+    assert r.returncode == 0 and "OK teclado" in r.stdout, r.stdout + r.stderr
 
 
 @test

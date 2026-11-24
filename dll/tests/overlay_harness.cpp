@@ -172,6 +172,21 @@ static std::wstring Text() { return g_text; }
 // OVERLAY_TEXT (UTF-8) cambia el texto de la primera prueba para mirar el recuadro con OVERLAY_DUMP:
 // '|' separa lineas y '^' al inicio de una linea la marca como coordenadas.
 static void TextFromEnv() {
+    // OVERLAY_TEXT_FILE: texto UTF-8 tal cual (con los codigos de estilo del panel)
+    if (const wchar_t* path = _wgetenv(L"OVERLAY_TEXT_FILE")) {
+        if (FILE* f = _wfopen(path, L"rb")) {
+            std::string u;
+            char buf[4096];
+            size_t n;
+            while ((n = fread(buf, 1, sizeof(buf), f)) > 0) u.append(buf, n);
+            fclose(f);
+            int m = MultiByteToWideChar(CP_UTF8, 0, u.data(), static_cast<int>(u.size()), nullptr, 0);
+            std::wstring w(static_cast<size_t>(m), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, u.data(), static_cast<int>(u.size()), &w[0], m);
+            g_text = w;
+            return;
+        }
+    }
     const wchar_t* t = _wgetenv(L"OVERLAY_TEXT");
     if (!t) return;
     std::wstring w(t);
@@ -249,7 +264,7 @@ int main() {
 
     // Pixeles: barra de acento a la izquierda, borde, fondo y texto claro (R8G8B8A8: bytes R,G,B,A).
     const uint8_t* map = static_cast<const uint8_t*>(g_maps[0]);
-    uint32_t w = 444, h = 107;
+    uint32_t w = c.imageExtent.width, h = c.imageExtent.height;  // 444 x 107 con el texto de la prueba
     CHECK(Pixel(map, w, 1, 50) == 0xFF3DA3E8);    // acento (232,163,61)
     CHECK(Pixel(map, w, w - 1, 50) == 0xFF48403A);  // borde (58,64,72)
     CHECK(Pixel(map, w, w - 3, h - 3) == 0xFF1E1814);  // fondo (20,24,30)
@@ -266,6 +281,11 @@ int main() {
     if (const char* dump = std::getenv("OVERLAY_DUMP")) {  // para mirar el recuadro: RGBA crudo
         if (FILE* f = std::fopen(dump, "wb")) {
             std::fwrite(map, 4, static_cast<size_t>(w) * h, f);
+            std::fclose(f);
+        }
+        std::string dims = std::string(dump) + ".txt";
+        if (FILE* f = std::fopen(dims.c_str(), "w")) {
+            std::fprintf(f, "%u %u\n", w, h);
             std::fclose(f);
         }
     }

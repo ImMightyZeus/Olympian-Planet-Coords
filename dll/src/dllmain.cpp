@@ -49,6 +49,8 @@
 #include "core.hpp"
 #include "game_reader.hpp"
 #include "http_server.hpp"
+#include "ingame_ui.hpp"
+#include "input_hook.hpp"
 #include "nms_offsets.h"
 #include "nms_sigs.h"
 #include "routes.hpp"
@@ -56,7 +58,7 @@
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.3"
+#define OLYMPIAN_VERSION "0.2.0-dev.4"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -87,6 +89,11 @@ std::atomic<int> g_candidate_count{0};
 std::atomic<uintptr_t> g_app_valid{0};
 uintptr_t g_global_g = 0;  // puntero global que lee cGcApplication::Update (solo para diagnostico)
 std::unique_ptr<olympian::Core> g_core;
+// Panel dentro del juego (escribir destinos, lista, ajustes). Lo abre la tecla del panel (F9).
+std::unique_ptr<olympian::Panel> g_panel;
+std::atomic<olympian::Panel*> g_panel_box{nullptr};
+bool g_panel_key_was_down = false;
+int g_input_hooks = 0;
 std::unique_ptr<olympian::HttpServer> g_http;
 olympian::Json g_debug_extra = olympian::Json::object();
 std::atomic<unsigned long long> g_frames{0};
@@ -269,8 +276,25 @@ void HookedUpdate(void* arg) {
         if (ok) ++g_frames_with_game;
         g_core->Tick(ok ? &view : nullptr, static_cast<double>(GetTickCount64()) / 1000.0);
         int vk = g_core->HotkeyVk();
-        bool down = vk && (GetAsyncKeyState(vk) & 0x8000) != 0;
-        g_core->KeyState(down, down && GameHasFocus());
+        // GetAsyncKeyState verdadero: el del juego devuelve "nada" mientras el panel captura el teclado.
+        bool down = vk && (olympian::InputRealAsyncKeyState(vk) & 0x8000) != 0;
+        bool focused = GameHasFocus();
+        if (g_panel && g_input_hooks > 0 && g_core->InGameBox()) {
+            // Todo dentro del juego: la tecla abre y cierra el panel (el recuadro .exe ya no se abre).
+            bool press = down && !g_panel_key_was_down;
+            g_panel_key_was_down = down;
+            if (press && focused) g_panel->Toggle();
+            if (!focused && g_panel->IsOpen()) g_panel->Close();  // Alt+Tab: el panel se cierra
+            olympian::InputSetCapture(g_panel->IsOpen() && focused);
+            olympian::InputTick();
+            std::vector<olympian::UiEvent> ev;
+            olympian::InputDrain(&ev);
+            for (const auto& e : ev) g_panel->OnKey(e);
+            if (!g_panel->IsOpen()) olympian::InputSetCapture(false);
+        } else {
+            olympian::InputSetCapture(false);
+            g_core->KeyState(down, down && focused);  // recuadro .exe (si el recuadro del juego esta apagado)
+        }
     } catch (...) {
         // Nunca dejar que un error del mod llegue al juego.
     }
@@ -401,6 +425,10 @@ std::wstring Wide(const std::string& s) {
 std::wstring BoxText() {
     olympian::Core* c = g_core_box.load();
     if (!c || !c->InGameBox()) return L"";
+    if (olympian::Panel* p = g_panel_box.load()) {
+        std::string t = p->Text();
+        if (!t.empty()) return Wide(t);
+    }
     olympian::Json s = olympian::Json::parse(c->CoordsJson(), nullptr, false);
     if (s.is_discarded()) return L"";
     const std::string lang = c->Lang();
@@ -542,6 +570,10 @@ DWORD WINAPI Worker(LPVOID) {
         g_core->SetNameSource(std::move(ns));
     }
     g_core_box = g_core.get();
+    g_panel = std::make_unique<olympian::Panel>(olympian::PanelHost{
+        [] { return g_core->CoordsJson(); },
+        [](const std::string& route, const olympian::Json& q) { return g_core->Put(route, q); }});
+    g_panel_box = g_panel.get();
     Log("Datos: %s  idioma=%s", data_path.c_str(), g_core->Lang().c_str());
 
     g_debug_extra = olympian::Json{{"dll", {{"version", OLYMPIAN_VERSION},
@@ -570,6 +602,9 @@ DWORD WINAPI Worker(LPVOID) {
             extra["dll"]["bbm_frames"] = g_bbm_frames.load();
             extra["vulkan"] = olympian::Json::parse(olympian::VkProbeJson());
             extra["overlay"] = olympian::Json::parse(olympian::OverlayJson());
+            extra["dll"]["input_hooks"] = g_input_hooks;
+            extra["dll"]["panel_open"] = g_panel_box.load() && g_panel_box.load()->IsOpen();
+            extra["dll"]["capturing"] = olympian::InputCapturing();
             olympian::HttpResponse res = olympian::Route(*g_core, req, extra);
             if (req.method == "PUT" && req.path.find("/marker") != std::string::npos &&
                 res.body.find("\"queued\":true") != std::string::npos)
@@ -600,6 +635,11 @@ DWORD WINAPI Worker(LPVOID) {
     }
     MH_STATUS mh = MH_Initialize();
     if (mh == MH_ERROR_ALREADY_INITIALIZED) mh = MH_OK;  // la sonda de Vulkan ya lo inicio
+    // Teclado del panel dentro del juego (si falla, el panel no se abre y F9 sigue con el recuadro .exe).
+    if (mh == MH_OK) {
+        g_input_hooks = olympian::InputHookInstall(&Log);
+        Log("Teclado del panel: %d de 5 enganches", g_input_hooks);
+    }
     // Marcador del HUD: si este hook fallara, las coordenadas siguen funcionando igual.
     void* bbm_target = reinterpret_cast<void*>(
         FindPattern(ParsePattern(kNmsSigs[FN_cGcBaseBuildingManager_Update].pattern), &count));

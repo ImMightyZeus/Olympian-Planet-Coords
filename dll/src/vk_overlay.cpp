@@ -33,8 +33,8 @@ extern "C" const unsigned char olympian_font_sharetech[], olympian_font_sharetec
 namespace {
 
 constexpr uint32_t kFrames = 4;                     // comandos en vuelo
-constexpr VkDeviceSize kMaxBytes = 1024 * 320 * 4;  // bufer por cuadro (cubre 4K)
-constexpr double kTextEveryMs = 100;
+constexpr VkDeviceSize kMaxBytes = 1280 * 1100 * 4;  // bufer por cuadro (el panel abierto en 4K cabe)
+constexpr double kTextEveryMs = 50;  // al escribir en el panel, la letra aparece en <= 50 ms
 
 OverlayLog g_log = nullptr;
 OverlayTextFn g_text = nullptr;
@@ -136,16 +136,85 @@ bool Supported(VkFormat f, bool* bgra) {
     }
 }
 
-// Tamano del recuadro segun la altura de la imagen (1080 = escala 1).
-void BoxSize(VkExtent2D e, uint32_t* w, uint32_t* h, double* scale) {
-    double s = std::clamp(e.height / 1080.0, 0.75, 2.5);
-    *scale = s;
-    *w = std::min<uint32_t>(static_cast<uint32_t>(std::lround(400 * s)), e.width);
-    *h = std::min<uint32_t>(static_cast<uint32_t>(std::lround(96 * s)), e.height);
-    while (static_cast<VkDeviceSize>(*w) * *h * 4 > kMaxBytes) {
-        *w = *w * 9 / 10;
-        *h = *h * 9 / 10;
+// Estilo de cada linea (codigos en vk_overlay.hpp). Sin codigo: linea 1 titulo, 2 grande, 3 pequena.
+struct LineStyle {
+    int size;          // px a escala 1
+    COLORREF color;
+    bool bold;
+    int fill;          // 0 nada, 1 fila elegida, 2 casilla de texto
+};
+struct Line {
+    std::wstring text;
+    LineStyle st;
+    bool numeric = false;
+};
+
+LineStyle StyleFor(wchar_t code, size_t index, bool* coded) {
+    *coded = true;
+    switch (code) {
+        case kStyleTitle: return {14, RGB(232, 163, 61), true, 0};
+        case kStyleBig: return {24, RGB(240, 240, 240), false, 0};
+        case kStyleSmall: return {14, RGB(160, 164, 172), false, 0};
+        case kStyleItem: return {16, RGB(225, 225, 225), false, 0};
+        case kStyleSelected: return {16, RGB(255, 255, 255), false, 1};
+        case kStyleError: return {15, RGB(240, 100, 100), false, 0};
+        case kStyleLabel: return {15, RGB(232, 163, 61), false, 0};
+        case kStyleInput: return {18, RGB(255, 255, 255), false, 2};
+        case kStyleOk: return {15, RGB(120, 210, 140), false, 0};
+        default: break;
     }
+    *coded = false;
+    if (index == 0) return {14, RGB(232, 163, 61), true, 0};
+    if (index == 1) return {24, RGB(240, 240, 240), false, 0};
+    return {16, RGB(176, 176, 176), false, 0};
+}
+
+// Lineas del texto. Sin codigos de estilo: maximo 3 (recuadro de siempre). Con codigos (panel): hasta 24.
+std::vector<Line> SplitLines(const std::wstring& text, bool* panel) {
+    std::vector<Line> out;
+    *panel = false;
+    size_t a = 0;
+    for (;;) {
+        size_t b = text.find(L'\n', a);
+        Line l;
+        l.text = text.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a);
+        bool coded = false;
+        l.st = StyleFor(l.text.empty() ? 0 : l.text[0], out.size(), &coded);
+        if (coded) {
+            l.text.erase(0, 1);
+            *panel = true;
+        }
+        if (!l.text.empty() && l.text[0] == kNumericLine) {
+            l.numeric = true;
+            l.text.erase(0, 1);
+        }
+        out.push_back(std::move(l));
+        if (b == std::wstring::npos || out.size() == 24) break;
+        a = b + 1;
+    }
+    if (!*panel && out.size() > 3) out.resize(3);
+    return out;
+}
+
+int LineStep(const Line& l) { return l.st.size + (l.st.fill ? 11 : 7); }
+
+// Tamano del recuadro segun la altura de la imagen (1080 = escala 1) y sus lineas.
+void BoxSize(VkExtent2D e, const std::wstring& text, uint32_t* w, uint32_t* h, double* scale) {
+    double s = std::clamp(e.height / 1080.0, 0.75, 2.5);
+    bool panel = false;
+    std::vector<Line> lines = SplitLines(text, &panel);
+    int units = 8 + 4;
+    for (const auto& l : lines) units += LineStep(l);
+    if (!panel) units = std::max(units, 96);
+    *w = std::min<uint32_t>(static_cast<uint32_t>(std::lround((panel ? 560 : 400) * s)), e.width);
+    *h = std::min<uint32_t>(static_cast<uint32_t>(std::lround(units * s)), e.height);
+    // Si no cabe en el bufer (pantallas muy grandes), se achica la escala entera, no solo el recuadro.
+    while (static_cast<VkDeviceSize>(*w) * *h * 4 > kMaxBytes && s > 0.5) {
+        s *= 0.9;
+        *w = std::min<uint32_t>(static_cast<uint32_t>(std::lround((panel ? 560 : 400) * s)), e.width);
+        *h = std::min<uint32_t>(static_cast<uint32_t>(std::lround(units * s)), e.height);
+    }
+    *scale = s;
 }
 
 // Dibuja el recuadro con GDI en un DIB de 32 bits y lo convierte al orden de la cadena.
@@ -208,26 +277,32 @@ void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool 
         }
     SetBkMode(dc, TRANSPARENT);
     EnsureFonts();
-    std::vector<std::wstring> lines;
-    size_t a = 0;
-    for (;;) {
-        size_t b = text.find(L'\n', a);
-        lines.push_back(text.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a));
-        if (b == std::wstring::npos || lines.size() == 3) break;
-        a = b + 1;
-    }
+    bool panel = false;
+    std::vector<Line> lines = SplitLines(text, &panel);
     // Mismo estilo que el recuadro .exe: numeros en DSEG7 Classic y texto en Share Tech Mono (en ruso,
-    // Consolas: Share Tech Mono no trae cirilico). Linea 1 titulo, linea 2 grande, linea 3 pequena.
-    const int sizes[3] = {14, 24, 16};
-    const COLORREF colors[3] = {RGB(232, 163, 61), RGB(240, 240, 240), RGB(176, 176, 176)};
+    // Consolas: Share Tech Mono no trae cirilico).
     int y = static_cast<int>(std::lround(8 * s));
     const int x0 = static_cast<int>(std::lround(14 * s));
     for (size_t i = 0; i < lines.size(); ++i) {
-        std::wstring line = lines[i];
-        bool numeric = !line.empty() && line[0] == kNumericLine;  // coordenadas: digitos en DSEG7
-        if (numeric) line.erase(0, 1);
-        int px = static_cast<int>(std::lround(sizes[i] * s));
-        HFONT ft = CreateFontW(-px, 0, 0, 0, i == 0 ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+        const std::wstring& line = lines[i].text;
+        const LineStyle& st = lines[i].st;
+        const bool numeric = lines[i].numeric;  // coordenadas: digitos en DSEG7
+        const int step = static_cast<int>(std::lround(LineStep(lines[i]) * s));
+        if (st.fill) {  // fila elegida o casilla de texto: fondo propio
+            const uint32_t fc = st.fill == 1 ? 0x3A4660 : 0x07090D;
+            const uint32_t fe = st.fill == 1 ? 0xE8A33D : 0x5A6270;
+            int y0 = y - static_cast<int>(std::lround(2 * s)), y1 = std::min<int>(y + step - static_cast<int>(std::lround(4 * s)), h - 2);
+            int xa = x0 - static_cast<int>(std::lround(6 * s)), xb = static_cast<int>(w) - static_cast<int>(std::lround(8 * s));
+            for (int yy = std::max(1, y0); yy < y1; ++yy)
+                for (int xx = std::max(1, xa); xx < xb; ++xx) {
+                    bool edge = st.fill == 1 ? xx < xa + static_cast<int>(std::lround(3 * s))
+                                             : (yy == std::max(1, y0) || yy + 1 == y1 || xx == std::max(1, xa) || xx + 1 == xb);
+                    p[yy * w + xx] = edge ? fe : fc;
+                }
+            y += static_cast<int>(std::lround(2 * s));
+        }
+        int px = static_cast<int>(std::lround(st.size * s));
+        HFONT ft = CreateFontW(-px, 0, 0, 0, st.bold ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
                                OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FIXED_PITCH,
                                TextFamily(line));
         HFONT fn = numeric ? CreateFontW(-static_cast<int>(std::lround(px * 0.86)), 0, 0, 0, FW_BOLD, 0, 0, 0,
@@ -235,7 +310,7 @@ void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool 
                                          ANTIALIASED_QUALITY, DEFAULT_PITCH, NumFamily())
                            : nullptr;
         HGDIOBJ of = SelectObject(dc, ft);
-        SetTextColor(dc, colors[i]);
+        SetTextColor(dc, st.color);
         TEXTMETRICW tm{};
         GetTextMetricsW(dc, &tm);
         const int baseline = y + tm.tmAscent;
@@ -273,7 +348,7 @@ void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool 
         SelectObject(dc, of);
         DeleteObject(ft);
         if (fn) DeleteObject(fn);
-        y += static_cast<int>(std::lround((sizes[i] + 7) * s));
+        y += step - (st.fill ? static_cast<int>(std::lround(2 * s)) : 0);
     }
     GdiFlush();
     for (size_t i = 0; i < g_raster.px.size(); ++i) {
@@ -457,7 +532,7 @@ VkResult OverlayPresent(VkQueue q, const VkPresentInfoKHR* pi, PFN_vkQueuePresen
     if (g_text_now.empty()) return pass();
     uint32_t w, h;
     double s;
-    BoxSize(sw.extent, &w, &h, &s);
+    BoxSize(sw.extent, g_text_now, &w, &h, &s);
     bool bgra = false;
     Supported(sw.format, &bgra);
     if (g_raster.text != g_text_now || g_raster.w != w || g_raster.h != h || g_raster.bgra != bgra || g_raster.px.empty())

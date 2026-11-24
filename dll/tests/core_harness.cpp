@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core.hpp"
+#include "ingame_ui.hpp"
 #include "http_server.hpp"
 #include "routes.hpp"
 
@@ -86,6 +87,9 @@ static olympian::GameView ViewFrom(const Json& f) {
 static int RunCore(const std::string& path, const std::string& system_lang = "es") {
     olympian::Core core(path, system_lang);
     int name_calls = 0;
+    olympian::Panel panel(olympian::PanelHost{
+        [&core] { return core.CoordsJson(); },
+        [&core](const std::string& r, const Json& q) { return core.Put(r, q); }});
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line.empty()) continue;
@@ -93,6 +97,51 @@ static int RunCore(const std::string& path, const std::string& system_lang = "es
         if (f.contains("put")) {
             Json q = f.value("query", Json::object());
             std::cout << core.Put(f["put"], q) << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("parse")) {  // lectura de coordenadas escritas (igual que parse_coords de Python)
+            olympian::ParsedCoords p = olympian::ParseCoords(f["parse"].get<std::string>());
+            std::cout << Json{{"ok", p.ok}, {"lat", p.lat}, {"lon", p.lon}, {"name", p.name}, {"error", p.error}}.dump()
+                      << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("panel")) {  // panel: "open", "close", "toggle" y teclas
+            std::string cmd = f["panel"].get<std::string>();
+            if (cmd == "open") panel.Open();
+            if (cmd == "close") panel.Close();
+            if (cmd == "toggle") panel.Toggle();
+            if (f.contains("keys"))
+                for (const auto& k : f["keys"]) {
+                    std::string n = k.get<std::string>();
+                    olympian::UiEvent e;
+                    if (n == "Enter") e.key = olympian::UiKey::Enter;
+                    else if (n == "Esc") e.key = olympian::UiKey::Esc;
+                    else if (n == "Back") e.key = olympian::UiKey::Back;
+                    else if (n == "Up") e.key = olympian::UiKey::Up;
+                    else if (n == "Down") e.key = olympian::UiKey::Down;
+                    else if (n == "Left") e.key = olympian::UiKey::Left;
+                    else if (n == "Right") e.key = olympian::UiKey::Right;
+                    else if (n == "Del") e.key = olympian::UiKey::Del;
+                    else if (n == "Tab") e.key = olympian::UiKey::Tab;
+                    else {  // texto: una letra por evento (UTF-8 -> codigo)
+                        std::u32string u;
+                        for (size_t i = 0; i < n.size();) {
+                            unsigned char c = static_cast<unsigned char>(n[i]);
+                            int len = c < 0x80 ? 1 : c < 0xE0 ? 2 : c < 0xF0 ? 3 : 4;
+                            char32_t cp = len == 1 ? c : len == 2 ? c & 0x1F : len == 3 ? c & 0x0F : c & 0x07;
+                            for (int j = 1; j < len; ++j) cp = (cp << 6) | (static_cast<unsigned char>(n[i + j]) & 0x3F);
+                            u += cp;
+                            i += static_cast<size_t>(len);
+                        }
+                        for (char32_t cp : u) panel.OnKey(olympian::UiEvent{olympian::UiKey::Char, cp});
+                        continue;
+                    }
+                    panel.OnKey(e);
+                }
+            std::cout << Json{{"open", panel.IsOpen()}, {"input", panel.InputUtf8()}, {"sel", panel.Selected()},
+                              {"page", panel.Page()}, {"text", panel.Text()}}
+                             .dump(-1, ' ', false, Json::error_handler_t::replace)
+                      << "\n" << std::flush;
             continue;
         }
         if (f.contains("names")) {  // nombres fijos de sistema y estacion (en el DLL los da el juego)

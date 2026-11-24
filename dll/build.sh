@@ -12,7 +12,7 @@ $CC -O2 -c third_party/src/hde/hde64.c -o build/obj/hde64.o
 $CC -c src/winmm_stubs.S -o build/obj/winmm_stubs.o
 $CC -c src/fonts.S -o build/obj/fonts.o  # fuentes del recuadro (incluye ../overlay/fonts/*.ttf)
 CXXFLAGS="-O2 -std=c++17 -Wall -Wextra -Ithird_party/include -Ithird_party -Ithird_party/vulkan"
-for f in dllmain core game_reader http_server vk_probe vk_overlay; do $CXX $CXXFLAGS -c src/$f.cpp -o build/obj/$f.o; done
+for f in dllmain core game_reader http_server vk_probe vk_overlay ingame_ui input_hook; do $CXX $CXXFLAGS -c src/$f.cpp -o build/obj/$f.o; done
 $CXX -shared -o build/winmm.dll build/obj/*.o src/winmm.def \
     -static -static-libgcc -static-libstdc++ -lversion -lws2_32 -lgdi32 -Wl,--enable-stdcall-fixup -s
 echo "OK: build/winmm.dll"
