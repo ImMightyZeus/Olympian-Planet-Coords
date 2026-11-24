@@ -5,7 +5,9 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <windows.h>
 
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -255,10 +257,12 @@ int main() {
     CHECK(g_barrier_images[0] == g_images[1] && g_copy_images[0] == g_images[1]);
     CHECK(g_copies.size() == 1);
     const VkBufferImageCopy& c = g_copies[0];
-    // 1200 de alto: escala 1.111 -> 444 x 107, a 27 px del borde
-    CHECK(c.imageExtent.width == 444 && c.imageExtent.height == 107 && c.imageExtent.depth == 1);
+    const uint32_t first_w = c.imageExtent.width, first_h = c.imageExtent.height;  // (c deja de valer luego)
+    // 1200 de alto: escala 1.111. El ancho se ajusta al texto (3 lineas: 99 de alto), a 27 px del borde
+    CHECK(c.imageExtent.width >= 230 && c.imageExtent.width <= 320 && c.imageExtent.height == 99 &&
+          c.imageExtent.depth == 1);
     CHECK(c.imageOffset.x == 27 && c.imageOffset.y == 27);
-    CHECK(c.bufferRowLength == 444 && c.bufferImageHeight == 107);
+    CHECK(c.bufferRowLength == c.imageExtent.width && c.bufferImageHeight == 99);
     CHECK(g_begins == 1 && g_ends == 1);
     std::printf("copia: %ux%u en (%d,%d)\n", c.imageExtent.width, c.imageExtent.height, c.imageOffset.x, c.imageOffset.y);
 
@@ -335,10 +339,16 @@ int main() {
     Present(q0, bgra, 1, game);
     CHECK(g_submits.size() == subs + 1);
     const VkBufferImageCopy& c2 = g_copies.back();
-    CHECK(c2.imageExtent.width == 533 && c2.imageExtent.height == 128 && c2.imageOffset.x == 32);
+    // 1440 de alto: escala 1.333 (x1.2 respecto a 1200)
+    const uint32_t w1 = first_w, h1 = first_h, w2 = c2.imageExtent.width;
+    // el ancho sale de medir el texto: las letras no crecen exacto x1.2 (tamanos enteros), +-8%
+    CHECK(std::abs(static_cast<int>(w2) - static_cast<int>(std::lround(w1 * 1.2))) <= static_cast<int>(w1 * 0.08));
+    CHECK(std::abs(static_cast<int>(c2.imageExtent.height) - static_cast<int>(std::lround(h1 * 1.2))) <= 3);
+    std::printf("copia 1440: %ux%u (1200: %ux%u)\n", w2, c2.imageExtent.height, w1, h1);
+    CHECK(c2.imageOffset.x == 32);
     bool found = false;
     for (void* m : g_maps)
-        if (Pixel(static_cast<uint8_t*>(m), 533, 1, 60) == 0xFFE8A33D) found = true;  // acento en BGRA
+        if (Pixel(static_cast<uint8_t*>(m), w2, 1, 60) == 0xFFE8A33D) found = true;  // acento en BGRA
     CHECK(found);
     // Cadena destruida: ya no se dibuja en ella.
     OverlayOnDestroySwapchain(bgra);

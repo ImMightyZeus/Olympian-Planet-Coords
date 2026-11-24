@@ -26,6 +26,11 @@ constexpr wchar_t kStyleError = L'\x15';     // aviso de error (rojo)
 constexpr wchar_t kStyleLabel = L'\x16';     // etiqueta (naranja)
 constexpr wchar_t kStyleInput = L'\x17';     // casilla de texto
 constexpr wchar_t kStyleOk = L'\x18';        // aviso correcto (verde)
+constexpr wchar_t kStyleDest = L'\x19';      // coordenadas del destino (azul)
+// Lineas de control (no se dibujan): kBoxBig + 'G' = tamano Grande; kBoxArrow + "yaw;pitch;morph" =
+// flecha 3D hacia el destino a la derecha (morph 1 = esfera en reposo, sin destino).
+constexpr wchar_t kBoxArrow = L'\x1A';
+constexpr wchar_t kBoxBig = L'\x1B';
 using OverlayTextFn = std::wstring (*)();
 
 void OverlaySetup(OverlayLog log, OverlayTextFn text, PFN_vkGetPhysicalDeviceMemoryProperties mem_props);

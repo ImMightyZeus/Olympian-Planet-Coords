@@ -141,7 +141,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.5" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.6" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -195,7 +195,9 @@ def test_destino_y_llegada_igual_que_python(exe):
     assert s["destination"] is None and s["last_result"]["message"] == "Llegaste a Torre", s
     assert s["last_result"]["ok"] is True and s["last_result"]["seq"] == 1
     loaded = py.load_data(path)  # la version Python lee lo que escribio el DLL
-    assert KEY not in loaded["destinations"] and loaded["history"] == data["history"]
+    # la lista vieja (sin planeta) tomo el planeta de su destino, igual que adopt_legacy_history()
+    assert KEY not in loaded["destinations"] and loaded["history"] == [dict(data["history"][0], planet=KEY)]
+    assert py.adopt_legacy_history(data["history"], data["destinations"]) == loaded["history"]
     assert loaded["settings"]["arrow_flip"] is True and abs(loaded["radii"][KEY] - R) < 0.1
     h.close()
 
@@ -358,6 +360,82 @@ def test_destinos_historial_tecla_y_marcador(exe):
 
 
 @test
+def test_lista_por_planeta_igual_que_python(exe):
+    """Cada planeta con su lista de 10; mismas reglas que push_history / visible_history de Python."""
+    path = os.path.join(tempfile.mkdtemp(), "datos.json")
+    data = json.loads(json.dumps(py.DEFAULT_DATA))
+    hist = []
+    for i in range(12):
+        hist = py.push_history(hist, i, 0, f"otro{i}", "OTRO-PLANETA")
+    data["history"] = hist + [{"lat": 9.0, "lon": 9.0, "name": "vieja"}]
+    py.save_data(path, data)
+    h = Harness([exe, "core", path])
+    s = h.ask(frame(12.0, -45.0, 0))
+    assert s["history"] == [], s["history"]  # los de otro planeta (y los viejos sin planeta) no se ven
+    exp = data["history"]
+    for i in range(12):
+        h.ask({"put": "marker", "query": {"lat": str(i), "lon": "1", "name": f"aqui{i}"}})
+        h.ask(frame(12.0, -45.0, 0.1 * (i + 1)))
+        exp = py.push_history(exp, i, 1, f"aqui{i}", KEY)
+    s = h.ask(frame(12.0, -45.0, 2.0))
+    assert s["history"] == py.visible_history(exp, KEY) and len(s["history"]) == 10, s["history"]
+    assert py.load_data(path)["history"] == exp
+    h.close()
+
+
+@test
+def test_flecha_igual_que_python(exe):
+    """La flecha del recuadro dentro del juego es la misma geometria que la del recuadro .exe."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ov", os.path.join(ROOT, "overlay", "olympian_overlay.py"))
+    ov = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ov)
+    h = Harness([exe, "core", os.path.join(tempfile.mkdtemp(), "datos.json")])
+    rnd = random.Random(3)
+    casos = [(0, 0, 0), (90, 0, 0), (180, 0, 0), (-90, 30, 0), (45, -60, 0), (0, 0, 1), (10, 5, 0.5), (0, 0, 0.99)]
+    casos += [(rnd.uniform(-180, 180), rnd.uniform(-89, 89), rnd.choice([0, 0, 0.3, 1])) for _ in range(60)]
+    for yaw, pitch, morph in casos:
+        got = h.ask({"arrow": [yaw, pitch, morph]})
+        want = ov.arrow_geometry(yaw, pitch, morph)
+        assert abs(got["ring_r"] - want["ring_r"]) < 1e-9
+        assert len(got["faces"]) == len(want["faces"]) and len(got["sphere"]) == len(want["sphere"]), (yaw, pitch, morph)
+        for g, w in zip(got["faces"], want["faces"]):
+            assert g["fill"] == w["fill"] and abs(g["z"] - w["z"]) < 1e-9, (g, w)
+            for a, b in zip(g["points"], w["points"]):
+                assert abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-9, (g, w)
+        for g, w in zip(got["sphere"], want["sphere"]):
+            assert g["fill"] == w["fill"] and abs(g["r"] - w["r"]) < 1e-9 and abs(g["cx"] - w["cx"]) < 1e-9
+    h.close()
+
+
+@test
+def test_recuadro_de_siempre_destino_y_flecha(exe):
+    """Recuadro con el panel cerrado: coordenadas, coordenadas del destino (azul), nombre/distancia/rumbo,
+    flecha hacia el destino (esfera si no hay) y tamano Grande."""
+    h = Harness([exe, "core", os.path.join(tempfile.mkdtemp(), "datos.json")])
+    h.ask(frame(12.0, -45.0, 0))
+    r = h.ask({"box": True})
+    assert r["text"].split("\n") == ["\x1a0.0;0.0;1", "\x10OLYMPIAN PLANET COORDS", "\x11\x01+12.00, -45.00"], r
+    h.ask({"put": "marker", "query": {"lat": "20", "lon": "54", "name": "test 001"}})
+    s = h.ask(frame(12.0, -45.0, 2.0))
+    d = s["destination"]
+    lines = h.ask({"box": True})["text"].split("\n")
+    assert lines[0] == f"\x1a{d['yaw']:.1f};{d['pitch']:.1f};0", lines
+    assert lines[2] == "\x11\x01+12.00, -45.00" and lines[3] == "\x19\x01+20.00, +54.00", lines
+    assert lines[4] == f"\x12» test 001 · {d['distance_m'] / 1000:.1f} km {d['cardinal']}", lines
+    h.ask({"put": "size", "query": {"size": "grande"}})
+    h.ask(frame(12.0, -45.0, 2.1))
+    assert h.ask({"box": True})["text"].startswith("\x1bG\n")
+    assert h.ask({"put": "size", "query": {"size": "enorme"}})["saved"] is False
+    # en una estacion: sin flecha, nombre y debajo sistema / galaxia
+    s = h.ask(frame(12.0, -45.0, 3.0, location=2, reality=9))
+    lines = h.ask({"box": True})["text"].split("\n")
+    assert lines[0] == "\x1bG" and lines[1] == "\x10OLYMPIAN PLANET COORDS" and lines[2] == "\x11Estacion espacial", lines
+    assert lines[3] == "\x12Eissentam", lines
+    h.close()
+
+
+@test
 def test_cruz_de_la_lista(exe):
     """PUT /forget (cruz de la lista de destinos): mismos mensajes y datos que la version Python."""
     path = os.path.join(tempfile.mkdtemp(), "datos.json")
@@ -385,13 +463,14 @@ def test_cruz_de_la_lista(exe):
     assert s["last_result"]["ok"] is False and s["last_result"]["message"] == py.tr("not_in_history", "es")
     r = h.ask({"put": "forget", "query": {"lat": "91", "lon": "0"}})
     assert r == {"queued": False, "message": py.tr("out_of_range", "es")}, r
-    # fuera del planeta: sale de la lista, el destino guardado del planeta queda
+    # fuera del planeta: la lista es de cada planeta, no se ve ni se quita nada (igual que Python)
     h.ask({"put": "marker", "query": {"lat": "5", "lon": "5", "name": "C"}})
     h.ask({"none": True, "t": 2.0})
     h.ask({"put": "forget", "query": {"lat": "5", "lon": "5"}})
     s = h.ask({"none": True, "t": 2.1})
-    assert s["history"] == [] and s["last_result"]["message"] == py.tr("history_removed", "es", coords="+5.00, +5.00")
+    assert s["history"] == [] and s["last_result"]["message"] == py.tr("not_in_history", "es"), s
     assert py.load_data(path)["destinations"][KEY]["name"] == "C"
+    assert py.load_data(path)["history"] == [{"lat": 5.0, "lon": 5.0, "name": "C", "planet": KEY}]
     # mismo resultado que la funcion de Python
     assert py.remove_from_history([{"lat": 1.0, "lon": 2.0, "name": ""}], 1.004, 1.996) == ([], True)
     h.close()
@@ -559,6 +638,12 @@ def test_panel_destinos_lista_y_ajustes(exe):
     # "ninguna" no se ofrece en el panel (sin tecla no se podria volver a abrir): F11 -> F5
     r = h.ask({"panel": "", "keys": ["Right", "Right"]})
     assert "‹ F5 ›" in r["text"], r["text"]
+    # tamano del recuadro: Normal <-> Grande (y el panel tambien crece)
+    r = h.ask({"panel": "", "keys": ["Down", "Right"]})
+    assert "\x14» Tamaño del recuadro: ‹ Grande ›" in r["text"].split("\n") and r["text"].startswith("\x1bG\n"), r["text"]
+    assert h.ask(frame(12.0, -45.0, 2.45))["box_size"] == "grande"
+    r = h.ask({"panel": "", "keys": ["Enter"]})
+    assert "‹ Normal ›" in r["text"] and not r["text"].startswith("\x1b"), r["text"]
     # quitar destino de este planeta (no hay): aviso
     r = h.ask({"panel": "", "keys": ["Down", "Enter"]})
     assert r["text"].split("\n")[-1].startswith("\x15"), r["text"]

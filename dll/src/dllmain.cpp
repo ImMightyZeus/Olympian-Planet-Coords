@@ -58,7 +58,7 @@
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.5"
+#define OLYMPIAN_VERSION "0.2.0-dev.6"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -431,37 +431,7 @@ std::wstring BoxText() {
     }
     olympian::Json s = olympian::Json::parse(c->CoordsJson(), nullptr, false);
     if (s.is_discarded()) return L"";
-    const std::string lang = c->Lang();
-    std::string l2, l3;
-    char buf[160];
-    if (s.contains("lat") && s["lat"].is_number() && s.contains("lon") && s["lon"].is_number()) {
-        snprintf(buf, sizeof(buf), "\x01%+.2f, %+.2f", s["lat"].get<double>(), s["lon"].get<double>());
-        l2 = buf;  // \x01 = linea de coordenadas (digitos en DSEG7, ver vk_overlay.hpp)
-        if (s.value("in_orbit", false))
-            l2 += lang == "es"   ? " \xC2\xB7 en \xC3\xB3rbita"
-                  : lang == "ru" ? " \xC2\xB7 \xD0\xBD\xD0\xB0 \xD0\xBE\xD1\x80\xD0\xB1\xD0\xB8\xD1\x82\xD0\xB5"  // на орбите
-                                 : " \xC2\xB7 in orbit";
-    } else if (s.contains("place") && s["place"].is_object() && s["place"].value("title", "") != "") {
-        // En una estacion: estacion y debajo, mas pequeno, sistema y galaxia. En el espacio: sistema y galaxia.
-        l2 = s["place"].value("title", "");
-        l3 = s["place"].value("subtitle", "");
-    } else {
-        l2 = s.contains("reason") && s["reason"].is_string() ? s["reason"].get<std::string>() : "";
-    }
-    if (s.contains("destination") && s["destination"].is_object()) {
-        const olympian::Json& d = s["destination"];
-        std::string name = d.contains("name") && d["name"].is_string() ? d["name"].get<std::string>() : "";
-        if (name.empty() && d.contains("lat") && d["lat"].is_number() && d["lon"].is_number()) {
-            snprintf(buf, sizeof(buf), "%+.2f, %+.2f", d["lat"].get<double>(), d["lon"].get<double>());
-            name = buf;
-        }
-        double m = d.contains("distance_m") && d["distance_m"].is_number() ? d["distance_m"].get<double>() : 0;
-        if (m < 1000) snprintf(buf, sizeof(buf), "%.0f m", m);
-        else snprintf(buf, sizeof(buf), "%.1f km", m / 1000);
-        std::string card = d.contains("cardinal") && d["cardinal"].is_string() ? d["cardinal"].get<std::string>() : "";
-        l3 = "\xC2\xBB " + name + " \xC2\xB7 " + buf + (card.empty() ? "" : " " + card);
-    }
-    return Wide("OLYMPIAN PLANET COORDS\n" + l2 + "\n" + l3);
+    return Wide(olympian::BoxLines(s, c->Lang()));
 }
 
 // Informes de la sonda de Vulkan: a los 20 s, 1 min, 3 min y luego cada 10 min.

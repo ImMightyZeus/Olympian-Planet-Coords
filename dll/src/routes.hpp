@@ -24,7 +24,7 @@ inline HttpResponse Route(Core& core, const HttpRequest& req, const Json& extra_
     }
     if (req.method == "PUT" || req.method == "POST") {
         if (route == "lang" || route == "hotkey" || route == "marker" || route == "clear" ||
-            route == "forget") {
+            route == "forget" || route == "size") {
             Json q = Json::object();
             for (const auto& [k, v] : req.query) q[k] = v;
             return {200, core.Put(route, q)};

@@ -10,12 +10,14 @@
 #include <cstdlib>
 #include <map>
 #include <regex>
+#include <vector>
 
 namespace olympian {
 
 namespace {
 
 // Codigos de estilo de linea (ver vk_overlay.hpp).
+const std::string kScaleBig = "\x1BG", kArrow = "\x1A", kDest = "\x19";
 const std::string kTitle = "\x10", kBig = "\x11", kSmall = "\x12", kItem = "\x13", kSel = "\x14", kErr = "\x15",
                   kLabel = "\x16", kInput = "\x17", kOk = "\x18", kNum = "\x01";
 
@@ -45,6 +47,10 @@ const std::map<std::string, UiMsg> kUi = {
       "\xE2\x86\x91\xE2\x86\x93 выбор \xC2\xB7 \xE2\x86\x90\xE2\x86\x92 изменить \xC2\xB7 Tab: цели \xC2\xB7 Esc: закрыть"}},
     {"lang", {"Idioma", "Language", "Язык"}},
     {"key", {"Tecla del panel", "Panel key", "Клавиша панели"}},
+    {"size", {"Tama\xC3\xB1o del recuadro", "Box size", "Размер окна"}},
+    {"size_normal", {"Normal", "Normal", "Обычный"}},
+    {"size_big", {"Grande", "Large", "Крупный"}},
+    {"in_orbit", {"en \xC3\xB3rbita", "in orbit", "на орбите"}},
     {"clear", {"Quitar el destino de este planeta", "Clear this planet's destination", "Удалить цель на этой планете"}},
     {"parse_format",
      {"formato: usa  +12.34, -56.78  (o 12,34; -56,78)", "format: use  +12.34, -56.78  (or 12,34; -56,78)",
@@ -156,6 +162,54 @@ ParsedCoords ParseCoords(const std::string& text) {
     }
     r.ok = true;
     return r;
+}
+
+std::string BoxLines(const Json& s, const std::string& lang) {
+    auto tr = [&lang](const char* key) {
+        auto it = kUi.find(key);
+        return std::string(lang == "ru" ? it->second.ru : lang == "en" ? it->second.en : it->second.es);
+    };
+    std::vector<std::string> out;
+    if (s.value("box_size", std::string("normal")) == "grande") out.push_back(kScaleBig);
+    const bool on_planet = s.contains("lat") && s["lat"].is_number() && s.contains("lon") && s["lon"].is_number();
+    const Json* d = s.contains("destination") && s["destination"].is_object() ? &s["destination"] : nullptr;
+    if (on_planet) {  // flecha: hacia el destino, o esfera en reposo si no hay destino
+        char buf[64];
+        double yaw = d && (*d).contains("yaw") && (*d)["yaw"].is_number() ? (*d)["yaw"].get<double>() : 0.0;
+        double pitch = d && (*d).contains("pitch") && (*d)["pitch"].is_number() ? (*d)["pitch"].get<double>() : 0.0;
+        std::snprintf(buf, sizeof(buf), "%.1f;%.1f;%d", yaw, pitch, d ? 0 : 1);
+        out.push_back(kArrow + buf);
+    }
+    out.push_back(kTitle + "OLYMPIAN PLANET COORDS");
+    if (on_planet) {
+        std::string l = kBig + kNum + Fmt(s["lat"].get<double>(), s["lon"].get<double>());
+        if (s.value("in_orbit", false)) l += " \xC2\xB7 " + tr("in_orbit");
+        out.push_back(l);
+    } else if (s.contains("place") && s["place"].is_object() && !s["place"].value("title", std::string()).empty()) {
+        // En una estacion: estacion y debajo, mas pequeno, sistema y galaxia. En el espacio: sistema y galaxia.
+        out.push_back(kBig + s["place"].value("title", std::string()));
+        std::string sub = s["place"].value("subtitle", std::string());
+        if (!sub.empty()) out.push_back(kSmall + sub);
+    } else {
+        out.push_back(kBig + (s.contains("reason") && s["reason"].is_string() ? s["reason"].get<std::string>() : ""));
+    }
+    if (d) {
+        double dlat = (*d).value("lat", 0.0), dlon = (*d).value("lon", 0.0);
+        out.push_back(kDest + kNum + Fmt(dlat, dlon));
+        std::string name = (*d).contains("name") && (*d)["name"].is_string() ? (*d)["name"].get<std::string>() : "";
+        double m = (*d).contains("distance_m") && (*d)["distance_m"].is_number() ? (*d)["distance_m"].get<double>() : 0;
+        char buf[64];
+        if (m < 1000)
+            std::snprintf(buf, sizeof(buf), "%.0f m", m);
+        else
+            std::snprintf(buf, sizeof(buf), "%.1f km", m / 1000);
+        std::string card = (*d).contains("cardinal") && (*d)["cardinal"].is_string() ? (*d)["cardinal"].get<std::string>() : "";
+        out.push_back(kSmall + "\xC2\xBB " + (name.empty() ? std::string() : name + " \xC2\xB7 ") + buf +
+                      (card.empty() ? "" : " " + card));
+    }
+    std::string text;
+    for (size_t i = 0; i < out.size(); ++i) text += (i ? "\n" : "") + out[i];
+    return text;
 }
 
 Panel::Panel(PanelHost host) : host_(std::move(host)) {}
@@ -292,6 +346,9 @@ void Panel::ChangeSetting(int dir) {
         ApplyResult(host_.put("lang", Json{{"code", kLangs[i]}}));
         Snap();
         if (status_ok_) Status(true, T("lang_saved"));
+    } else if (setting_ == kRowSize) {
+        std::string cur = s.value("box_size", std::string("normal"));
+        ApplyResult(host_.put("size", Json{{"size", cur == "grande" ? "normal" : "grande"}}));
     } else if (setting_ == kRowKey) {
         int i = IndexOf(kKeys, 7, s.value("hotkey", std::string("f9")));
         i = ((i < 0 ? 4 : i) + dir + 7) % 7;
@@ -366,7 +423,8 @@ std::string Panel::Text() {
     std::lock_guard<std::mutex> g(mu_);
     if (!open_) return "";
     Json s = Snap();
-    std::string out = kTitle + "OLYMPIAN PLANET COORDS \xC2\xB7 " + T(page_ == kDest ? "title_dest" : "title_settings");
+    std::string out = (s.value("box_size", std::string("normal")) == "grande" ? kScaleBig + "\n" : std::string()) + kTitle +
+                      "OLYMPIAN PLANET COORDS \xC2\xB7 " + T(page_ == kDest ? "title_dest" : "title_settings");
     auto line = [&out](const std::string& l) { out += "\n" + l; };
     // Donde estas (siempre a la vista)
     if (s.contains("lat") && s["lat"].is_number() && s.contains("lon") && s["lon"].is_number()) {
@@ -394,8 +452,10 @@ std::string Panel::Text() {
     } else {
         std::string lang_name = kLangNames[std::max(0, IndexOf(kLangs, 3, lang_))];
         std::string key = Upper(s.value("hotkey", std::string("f9")));
+        std::string size = T(s.value("box_size", std::string("normal")) == "grande" ? "size_big" : "size_normal");
         const std::string rows[kRowCount] = {T("lang") + ": \xE2\x80\xB9 " + lang_name + " \xE2\x80\xBA",
-                                             T("key") + ": \xE2\x80\xB9 " + key + " \xE2\x80\xBA", T("clear")};
+                                             T("key") + ": \xE2\x80\xB9 " + key + " \xE2\x80\xBA",
+                                             T("size") + ": \xE2\x80\xB9 " + size + " \xE2\x80\xBA", T("clear")};
         for (int i = 0; i < kRowCount; ++i) line((i == setting_ ? kSel + "\xC2\xBB " : kItem + "  ") + rows[i]);
         line(kSmall + T("hint_settings"));
     }

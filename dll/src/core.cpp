@@ -108,18 +108,63 @@ std::string Lower(std::string s) {
     return s;
 }
 
-// Igual que push_history de Python: el mas reciente primero, sin repetir lat/lon, maximo 10.
-Json PushHistory(const Json& history, double lat, double lon, const std::string& name) {
+bool SamePoint(const Json& h, double lat, double lon, const std::string& planet) {
+    if (!h.is_object() || !h.contains("lat") || !h.contains("lon") || !h["lat"].is_number() || !h["lon"].is_number())
+        return false;
+    std::string hp = h.contains("planet") && h["planet"].is_string() ? h["planet"].get<std::string>() : "";
+    return h["lat"].get<double>() == lat && h["lon"].get<double>() == lon && hp == planet;
+}
+
+std::string PlanetOf(const Json& h) {
+    return h.is_object() && h.contains("planet") && h["planet"].is_string() ? h["planet"].get<std::string>() : "";
+}
+
+// Igual que push_history de Python: cada punto con su planeta, el mas reciente primero, sin repetir
+// lat/lon en el mismo planeta, maximo kHistoryMax por planeta y kHistoryTotalMax en total.
+Json PushHistory(const Json& history, double lat, double lon, const std::string& name, const std::string& planet) {
     Json entry{{"lat", geo::RoundTo(lat, 2)}, {"lon", geo::RoundTo(lon, 2)}, {"name", name}};
+    if (!planet.empty()) entry["planet"] = planet;
     Json out = Json::array({entry});
+    int count = 1;
     if (history.is_array())
         for (const auto& h : history) {
-            if (out.size() >= static_cast<size_t>(kHistoryMax)) break;
-            bool same = h.is_object() && h.contains("lat") && h.contains("lon") && h["lat"].is_number() &&
-                        h["lon"].is_number() && h["lat"].get<double>() == entry["lat"].get<double>() &&
-                        h["lon"].get<double>() == entry["lon"].get<double>();
-            if (!same) out.push_back(h);
+            if (SamePoint(h, entry["lat"].get<double>(), entry["lon"].get<double>(), planet)) continue;
+            if (PlanetOf(h) == planet) {
+                if (count >= kHistoryMax) continue;
+                ++count;
+            }
+            if (out.size() >= static_cast<size_t>(kHistoryTotalMax)) break;
+            out.push_back(h);
         }
+    return out;
+}
+
+// Igual que visible_history de Python: los destinos guardados de ESTE planeta (sin el campo planet).
+Json VisibleHistory(const Json& history, const std::string& planet) {
+    Json out = Json::array();
+    if (planet.empty() || !history.is_array()) return out;
+    for (const auto& h : history) {
+        if (PlanetOf(h) != planet) continue;
+        out.push_back(Json{{"lat", h.value("lat", 0.0)}, {"lon", h.value("lon", 0.0)}, {"name", h.value("name", std::string())}});
+        if (out.size() >= static_cast<size_t>(kHistoryMax)) break;
+    }
+    return out;
+}
+
+// Igual que adopt_legacy_history de Python: a los puntos sin planeta (listas de antes) se les pone el
+// planeta cuyo destino coincide.
+Json AdoptLegacyHistory(const Json& history, const Json& destinations) {
+    Json out = Json::array();
+    for (auto h : history) {
+        if (h.is_object() && PlanetOf(h).empty() && destinations.is_object())
+            for (const auto& [key, d] : destinations.items())
+                if (d.is_object() && d.contains("lat") && d.contains("lon") && h.contains("lat") && h.contains("lon") &&
+                    d["lat"] == h["lat"] && d["lon"] == h["lon"]) {
+                    h["planet"] = key;
+                    break;
+                }
+        out.push_back(h);
+    }
     return out;
 }
 
@@ -194,12 +239,15 @@ void Core::Load() {
         if (raw.contains("destinations") && raw["destinations"].is_object()) data_["destinations"] = raw["destinations"];
         if (raw.contains("history") && raw["history"].is_array()) {
             Json h = Json::array();
-            for (size_t i = 0; i < raw["history"].size() && i < static_cast<size_t>(kHistoryMax); ++i)
-                h.push_back(raw["history"][i]);
+            for (const auto& e : raw["history"]) {
+                if (h.size() >= static_cast<size_t>(kHistoryTotalMax)) break;
+                if (e.is_object()) h.push_back(e);
+            }
             data_["history"] = h;
         }
         if (raw.contains("settings") && raw["settings"].is_object())
             for (auto& [k, v] : raw["settings"].items()) data_["settings"][k] = v;
+        data_["history"] = AdoptLegacyHistory(data_["history"], data_["destinations"]);
         if (raw.contains("radii") && raw["radii"].is_object()) data_["radii"] = raw["radii"];
     } catch (...) {
         f.close();
@@ -516,12 +564,16 @@ Json Core::PlaceLocked(const GameView& v, double now) {
 std::string Core::CoordsJson() {
     std::lock_guard<std::mutex> g(mu_);
     Json snap = snapshot_;
-    snap["history"] = data_["history"];
+    snap["history"] = VisibleHistory(data_["history"], snapshot_.value("planet_key", std::string()));
     snap["last_result"] = last_result_;
     snap["input_request_id"] = input_request_id_;
     snap["version"] = kModVersion;
     std::string saved = SavedHotkey(data_["settings"]);
     snap["hotkey"] = saved;  // en el DLL la tecla elegida se activa al momento
+    {
+        const Json& st = data_["settings"];
+        snap["box_size"] = st.contains("box_size") && st["box_size"].is_string() && st["box_size"] == "grande" ? "grande" : "normal";
+    }
     snap["hotkey_saved"] = saved;
     snap["lang"] = LangLocked();
     return snap.dump(-1, ' ', false, Json::error_handler_t::replace);
@@ -562,6 +614,15 @@ std::string Core::Put(const std::string& route, const Json& query) {
         } else {
             r = Json{{"saved", false}, {"message", T("bad_lang")}};
         }
+    } else if (route == "size") {  // solo el DLL: tamano del recuadro dentro del juego
+        std::string z = Lower(Trim(query.value("size", "")));
+        if (z == "normal" || z == "grande") {
+            data_["settings"]["box_size"] = z;
+            Save();
+            r = Json{{"saved", true}, {"size", z}};
+        } else {
+            r = Json{{"saved", false}, {"message", "normal | grande"}};
+        }
     } else if (route == "hotkey") {
         std::string k = Lower(Trim(query.value("key", "")));
         bool ok = false;
@@ -590,7 +651,7 @@ std::string Core::Put(const std::string& route, const Json& query) {
                 std::string key = context_["planet_key"].get<std::string>();
                 data_["destinations"][key] =
                     Json{{"lat", geo::RoundTo(lat, 2)}, {"lon", geo::RoundTo(lon, 2)}, {"name", name}};
-                data_["history"] = PushHistory(data_["history"], lat, lon, name);
+                data_["history"] = PushHistory(data_["history"], lat, lon, name, key);
                 Save();
                 std::string coords = FormatCoords(lat, lon) + (name.empty() ? "" : " " + name);
                 SetResult(true, Replace(T("dest_set"), "{coords}", coords));
@@ -616,6 +677,7 @@ std::string Core::Put(const std::string& route, const Json& query) {
         } else {
             r = Json{{"queued", true}};
             double rl = geo::RoundTo(lat, 2), ro = geo::RoundTo(lon, 2);
+            std::string key = context_.is_null() ? "" : context_["planet_key"].get<std::string>();
             auto same = [&](const Json& h) {
                 return h.is_object() && h.contains("lat") && h.contains("lon") && h["lat"].is_number() &&
                        h["lon"].is_number() && h["lat"].get<double>() == rl && h["lon"].get<double>() == ro;
@@ -624,14 +686,13 @@ std::string Core::Put(const std::string& route, const Json& query) {
             bool found = false;
             if (data_["history"].is_array())
                 for (const auto& h : data_["history"]) {
-                    if (same(h)) found = true;
+                    if (SamePoint(h, rl, ro, key)) found = true;
                     else kept.push_back(h);
                 }
             if (!found) {
                 SetResult(false, T("not_in_history"));
             } else {
                 data_["history"] = kept;
-                std::string key = context_.is_null() ? "" : context_["planet_key"].get<std::string>();
                 bool also_dest = !key.empty() && data_["destinations"].contains(key) && same(data_["destinations"][key]);
                 if (also_dest) data_["destinations"].erase(key);
                 Save();

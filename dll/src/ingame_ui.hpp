@@ -41,6 +41,11 @@ struct ParsedCoords {
 };
 ParsedCoords ParseCoords(const std::string& text_utf8);
 
+// Recuadro de siempre (panel cerrado), con los codigos de vk_overlay.hpp: titulo; coordenadas (o
+// estacion / sistema); destino (coordenadas en azul y debajo nombre, distancia y rumbo); flecha 3D hacia
+// el destino (en un planeta: sin destino, esfera en reposo); tamano Normal o Grande.
+std::string BoxLines(const Json& snapshot, const std::string& lang);
+
 // Texto del panel para el recuadro (formato de lineas en vk_overlay.hpp).
 constexpr size_t kPanelMaxInput = 80;  // letras
 
@@ -65,7 +70,7 @@ class Panel {
 
    private:
     enum PageId { kDest = 0, kSettings = 1 };
-    enum SettingRow { kRowLang = 0, kRowKey = 1, kRowClear = 2, kRowCount = 3 };
+    enum SettingRow { kRowLang = 0, kRowKey = 1, kRowSize = 2, kRowClear = 3, kRowCount = 4 };
 
     std::string T(const char* key) const;
     Json Snap();

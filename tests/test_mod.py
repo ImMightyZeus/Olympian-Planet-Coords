@@ -371,16 +371,17 @@ def test_cruz_de_la_lista_quita_del_historial_y_del_destino():
     assert m.http_coords["last_result"] == {"ok": False, "message": "ese punto no esta en la lista",
                                             "seq": m.http_coords["last_result"]["seq"]}
     assert m.http_forget(91, 0)["queued"] is False
-    # fuera del planeta: se puede quitar de la lista, el destino guardado del planeta no se toca
+    # fuera del planeta: la lista es la de cada planeta, asi que no se ve ni se quita nada
     m.http_marker(5, 5, "C")
     tick(m)
     GAME.set_location(EnvironmentLocation.Enum.SpaceStation)
     tick(m)
+    assert m.http_coords["history"] == []
     m.http_forget(5, 5)
     tick(m)
-    assert m.http_coords["history"] == []
-    assert m.http_coords["last_result"]["message"] == "Quitado de la lista: +5.00, +5.00"
+    assert m.http_coords["last_result"]["message"] == "ese punto no esta en la lista"
     assert any(d.get("name") == "C" for d in m.data["destinations"].values())
+    assert any(h.get("name") == "C" for h in m.data["history"])
     GAME.set_location(EnvironmentLocation.Enum.PlanetOnFoot)
 
 
@@ -818,6 +819,42 @@ def test_nombres_del_juego_llamada_real_por_ctypes():
     bad = mod.GameNames(base=0x140000000, reader=lambda a, n: b"\xcc" * n)
     assert bad.station_name(ua) == "" and bad.broken
     assert bad.system_name(0x10) == ""
+
+
+def test_lista_de_destinos_por_planeta():
+    """Cada planeta tiene su lista (max 10); otro planeta no ve la del primero. Las listas viejas (sin
+    planeta) toman el planeta cuyo destino coincide; las demas entradas no se muestran ni se borran."""
+    h = []
+    for i in range(12):
+        h = mod.push_history(h, i, 0, f"a{i}", "A")
+    h = mod.push_history(h, 1, 1, "b", "B")
+    assert [x["name"] for x in mod.visible_history(h, "A")] == [f"a{i}" for i in range(11, 1, -1)]
+    assert mod.visible_history(h, "B") == [{"lat": 1.0, "lon": 1.0, "name": "b"}]
+    assert mod.visible_history(h, "") == [] and mod.visible_history(h, "C") == []
+    h = mod.push_history(h, 5, 0, "a5 otra vez", "A")  # sin repetir en el mismo planeta
+    assert [x["name"] for x in mod.visible_history(h, "A")][:2] == ["a5 otra vez", "a11"]
+    h = mod.push_history(h, 5, 0, "mismo punto en B", "B")  # el mismo punto en otro planeta si se guarda
+    assert len(mod.visible_history(h, "B")) == 2 and len(mod.visible_history(h, "A")) == 10
+    h2, found = mod.remove_from_history(h, 5, 0, "B")
+    assert found and len(mod.visible_history(h2, "B")) == 1 and len(mod.visible_history(h2, "A")) == 10
+    many = []
+    for i in range(400):
+        many = mod.push_history(many, 1, 1, "", f"P{i}")
+    assert len(many) == mod.HISTORY_TOTAL_MAX and many[0]["planet"] == "P399"
+    legacy = [{"lat": 15.0, "lon": -40.0, "name": "Torre"}, {"lat": 1.0, "lon": 2.0, "name": "?"}]
+    adopted = mod.adopt_legacy_history(legacy, {"K1": {"lat": 15.0, "lon": -40.0, "name": "Torre"}})
+    assert adopted[0]["planet"] == "K1" and "planet" not in adopted[1]
+    # en el mod: cambiar de planeta cambia la lista
+    m = make_mod()
+    at(0, 0)
+    tick(m, 3)
+    m.http_marker(10, 10, "aqui")
+    tick(m)
+    assert [x["name"] for x in m.http_coords["history"]] == ["aqui"]
+    GAME.set_planet(8, 3)  # otro sistema y planeta
+    at(0, 0)
+    tick(m, 3)
+    assert m.http_coords["history"] == [], m.http_coords["history"]
 
 
 if __name__ == "__main__":

@@ -23,11 +23,12 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.2.0-dev.5";  // v0.2 en desarrollo: panel dentro del juego con el teclado (cola de mensajes)
+constexpr const char* kModVersion = "0.2.0-dev.6";  // v0.2 en desarrollo: panel, flecha, tamano y lista por planeta
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;
-constexpr int kHistoryMax = 10;
+constexpr int kHistoryMax = 10;       // destinos guardados por planeta
+constexpr int kHistoryTotalMax = 300;  // entre todos los planetas
 constexpr int kNameMaxChars = 60;   // como la version Python (name.strip()[:60])
 constexpr int kMarkerTypeCustom = 0x35;  // cGcMarkerType::CustomMarker (nmspy 185034.0)
 

@@ -309,7 +309,8 @@ class CoordsError(ValueError):
         return tr(self.code, lang)
 ARRIVAL_METERS = 50.0  # a esta distancia (o menos) se considera que llegaste
 ORBIT_FACTOR = 3.0  # en el espacio, "orbita" = a menos de 3 radios del centro del planeta
-HISTORY_MAX = 10
+HISTORY_MAX = 10  # destinos guardados por planeta
+HISTORY_TOTAL_MAX = 300  # entre todos los planetas (los mas viejos se pierden)
 STABLE_SECONDS = 1.0  # espera tras cargar / teletransportarse antes de colocar el marcador
 NAME_REFRESH_SECONDS = 3.0  # cada cuanto se vuelve a pedir al juego el nombre del sistema / estacion
 
@@ -473,7 +474,7 @@ def default_data_path() -> str:
 DEFAULT_DATA = {
     "version": 1,
     "destinations": {},  # planet_key -> {"lat", "lon", "name"}
-    "history": [],  # [{"lat", "lon", "name"}], mas reciente primero, max HISTORY_MAX
+    "history": [],  # [{"lat", "lon", "name", "planet"}], mas reciente primero, max HISTORY_MAX por planeta
     "radii": {},  # planet_key -> distancia al centro medida en la superficie (radio real del planeta)
     "settings": {"convention": 0, "invert_lat": False, "planet_pos_is_local": False, "method": 1,
                  "pos_source": 0, "env_add_offset": False, "arrow_flip": False,
@@ -489,7 +490,8 @@ def load_data(path: str) -> dict:
         if isinstance(raw.get("destinations"), dict):
             data["destinations"] = raw["destinations"]
         if isinstance(raw.get("history"), list):
-            data["history"] = raw["history"][:HISTORY_MAX]
+            data["history"] = adopt_legacy_history(
+                [h for h in raw["history"] if isinstance(h, dict)][:HISTORY_TOTAL_MAX], data["destinations"])
         if isinstance(raw.get("settings"), dict):
             data["settings"].update(raw["settings"])
         if isinstance(raw.get("radii"), dict):
@@ -588,17 +590,57 @@ class HotkeyChoice(IntEnum):
     Ninguna = 7
 
 
-def push_history(history: list, lat: float, lon: float, name: str) -> list:
+def _same_point(h: dict, lat: float, lon: float, planet: str) -> bool:
+    return (h.get("lat"), h.get("lon")) == (lat, lon) and (h.get("planet") or "") == planet
+
+
+def push_history(history: list, lat: float, lon: float, name: str, planet: str = "") -> list:
+    """Lista de destinos guardados: cada uno con su planeta. El mas reciente primero, sin repetir lat/lon
+    en el mismo planeta, maximo HISTORY_MAX por planeta y HISTORY_TOTAL_MAX en total."""
     entry = {"lat": round(lat, 2), "lon": round(lon, 2), "name": name}
-    rest = [h for h in history if (h.get("lat"), h.get("lon")) != (entry["lat"], entry["lon"])]
-    return ([entry] + rest)[:HISTORY_MAX]
+    if planet:
+        entry["planet"] = planet
+    out, count = [entry], 1
+    for h in history:
+        if _same_point(h, entry["lat"], entry["lon"], planet):
+            continue
+        if (h.get("planet") or "") == planet:
+            if count >= HISTORY_MAX:
+                continue
+            count += 1
+        out.append(h)
+    return out[:HISTORY_TOTAL_MAX]
 
 
-def remove_from_history(history: list, lat: float, lon: float) -> tuple[list, bool]:
-    """Quita de la lista el punto (lat, lon) redondeado a 2 decimales. Devuelve (lista, se quito)."""
-    key = (round(lat, 2), round(lon, 2))
-    rest = [h for h in history if (h.get("lat"), h.get("lon")) != key]
+def visible_history(history: list, planet: str) -> list:
+    """Los destinos guardados de ESTE planeta (lo que ven el panel y el recuadro .exe). Fuera de un
+    planeta, ninguno."""
+    if not planet:
+        return []
+    return [{"lat": h.get("lat"), "lon": h.get("lon"), "name": h.get("name", "")}
+            for h in history if h.get("planet") == planet][:HISTORY_MAX]
+
+
+def remove_from_history(history: list, lat: float, lon: float, planet: str = "") -> tuple[list, bool]:
+    """Quita de la lista el punto (lat, lon) de ese planeta, redondeado a 2 decimales. Devuelve
+    (lista, se quito)."""
+    la, lo = round(lat, 2), round(lon, 2)
+    rest = [h for h in history if not _same_point(h, la, lo, planet)]
     return rest, len(rest) != len(history)
+
+
+def adopt_legacy_history(history: list, destinations: dict) -> list:
+    """Las listas de antes no guardaban el planeta: se le pone a cada punto que coincide con el destino
+    de un planeta. Los demas quedan sin planeta (no se muestran, pero no se borran)."""
+    out = []
+    for h in history:
+        if not h.get("planet"):
+            for key, d in destinations.items():
+                if isinstance(d, dict) and (d.get("lat"), d.get("lon")) == (h.get("lat"), h.get("lon")):
+                    h = dict(h, planet=key)
+                    break
+        out.append(h)
+    return out
 
 
 # --------------------------------------------------------------------------------------------
@@ -1123,7 +1165,7 @@ class OlympianPlanetCoords(Mod):
                         raise LookupError(self._snapshot.get("reason") or "no estas en un planeta")
                     key = self._ctx["planet_key"]
                     self.data["destinations"][key] = {"lat": round(lat, 2), "lon": round(lon, 2), "name": name}
-                    self.data["history"] = push_history(self.data["history"], lat, lon, name)
+                    self.data["history"] = push_history(self.data["history"], lat, lon, name, key)
                     self._save()
                     self._remove_active()  # reemplaza el destino anterior de este planeta
                     coords = f"{lat:+.2f}, {lon:+.2f}" + (f" {name}" if name else "")
@@ -1139,11 +1181,11 @@ class OlympianPlanetCoords(Mod):
                     # Cruz de la lista de destinos: quita el punto de la lista y, si es el destino del
                     # planeta actual, tambien el destino y su marcador.
                     lat, lon = args
-                    history, found = remove_from_history(self.data["history"], lat, lon)
+                    key = self._ctx["planet_key"] if self._ctx is not None else None
+                    history, found = remove_from_history(self.data["history"], lat, lon, key or "")
                     if not found:
                         raise LookupError(self.t("not_in_history"))
                     self.data["history"] = history
-                    key = self._ctx["planet_key"] if self._ctx is not None else None
                     dest = self.data["destinations"].get(key) if key else None
                     also_dest = bool(dest) and (dest.get("lat"), dest.get("lon")) == (round(lat, 2), round(lon, 2))
                     if also_dest:
@@ -1224,7 +1266,7 @@ class OlympianPlanetCoords(Mod):
     @endpoint(route="coords", method="GET")
     def http_coords(self):
         snap = dict(self._snapshot)
-        snap["history"] = list(self.data["history"])
+        snap["history"] = visible_history(self.data["history"], self._snapshot.get("planet_key") or "")
         snap["last_result"] = self._last_result
         snap["input_request_id"] = self.input_request_id
         snap["version"] = MOD_VERSION

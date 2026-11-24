@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "core.hpp"
+#include "arrow.hpp"
 #include "ingame_ui.hpp"
 #include "http_server.hpp"
 #include "routes.hpp"
@@ -97,6 +98,31 @@ static int RunCore(const std::string& path, const std::string& system_lang = "es
         if (f.contains("put")) {
             Json q = f.value("query", Json::object());
             std::cout << core.Put(f["put"], q) << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("arrow")) {  // geometria de la flecha (igual que arrow_geometry de Python)
+            const Json& a = f["arrow"];
+            olympian::ArrowGeo g = olympian::ArrowGeometry(a[0], a[1], a[2]);
+            Json faces = Json::array(), sphere = Json::array();
+            char col[16];
+            for (const auto& fc : g.faces) {
+                std::snprintf(col, sizeof(col), "#%02x%02x%02x", fc.r, fc.g, fc.b);
+                faces.push_back(Json{{"z", fc.z}, {"points", Json::array({Json::array({fc.pts[0], fc.pts[1]}),
+                                                                          Json::array({fc.pts[2], fc.pts[3]}),
+                                                                          Json::array({fc.pts[4], fc.pts[5]})})},
+                                     {"fill", col}});
+            }
+            for (const auto& sp : g.sphere) {
+                std::snprintf(col, sizeof(col), "#%02X%02X%02X", sp.red, sp.green, sp.blue);
+                sphere.push_back(Json{{"cx", sp.cx}, {"cy", sp.cy}, {"r", sp.r}, {"fill", col}});
+            }
+            std::cout << Json{{"faces", faces}, {"ring_r", g.ring_r}, {"sphere", sphere}}.dump() << "\n" << std::flush;
+            continue;
+        }
+        if (f.contains("box")) {  // texto del recuadro de siempre (panel cerrado)
+            Json snap = Json::parse(core.CoordsJson());
+            std::cout << Json{{"text", olympian::BoxLines(snap, core.Lang())}}.dump(-1, ' ', false, Json::error_handler_t::replace)
+                      << "\n" << std::flush;
             continue;
         }
         if (f.contains("parse")) {  // lectura de coordenadas escritas (igual que parse_coords de Python)
