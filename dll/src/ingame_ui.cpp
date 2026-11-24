@@ -17,7 +17,7 @@ namespace olympian {
 namespace {
 
 // Codigos de estilo de linea (ver vk_overlay.hpp).
-const std::string kScaleBig = "\x1BG", kArrow = "\x1A", kDest = "\x19";
+const std::string kScaleBig = "\x1BG", kArrow = "\x1A", kDest = "\x19", kDestSmall = "\x1C";
 const std::string kTitle = "\x10", kBig = "\x11", kSmall = "\x12", kItem = "\x13", kSel = "\x14", kErr = "\x15",
                   kLabel = "\x16", kInput = "\x17", kOk = "\x18", kNum = "\x01";
 
@@ -50,7 +50,12 @@ const std::map<std::string, UiMsg> kUi = {
     {"size", {"Tama\xC3\xB1o del recuadro", "Box size", "Размер окна"}},
     {"size_normal", {"Normal", "Normal", "Обычный"}},
     {"size_big", {"Grande", "Large", "Крупный"}},
-    {"in_orbit", {"en \xC3\xB3rbita", "in orbit", "на орбите"}},
+    {"in_orbit", {"\xC3\x93RBITA", "ORBIT", "ОРБИТА"}},
+    {"tag_now", {"AHORA", "NOW", "СЕЙЧАС"}},
+    {"tag_dest", {"DESTINO", "DEST", "ЦЕЛЬ"}},
+    {"dest_info",
+     {"a {dist} \xC2\xB7 rumbo {bearing}\xC2\xB0 {cardinal}", "{dist} away \xC2\xB7 bearing {bearing}\xC2\xB0 {cardinal}",
+      "{dist} \xC2\xB7 курс {bearing}\xC2\xB0 {cardinal}"}},
     {"clear", {"Quitar el destino de este planeta", "Clear this planet's destination", "Удалить цель на этой планете"}},
     {"parse_format",
      {"formato: usa  +12.34, -56.78  (o 12,34; -56,78)", "format: use  +12.34, -56.78  (or 12,34; -56,78)",
@@ -180,11 +185,10 @@ std::string BoxLines(const Json& s, const std::string& lang) {
         std::snprintf(buf, sizeof(buf), "%.1f;%.1f;%d", yaw, pitch, d ? 0 : 1);
         out.push_back(kArrow + buf);
     }
-    out.push_back(kTitle + "OLYMPIAN PLANET COORDS");
+    // Como el recuadro .exe: titulo (con ORBITA al lado), fila AHORA, fila DESTINO y debajo la info.
+    out.push_back(kTitle + "OLYMPIAN PLANET COORDS" + (on_planet && s.value("in_orbit", false) ? "  " + tr("in_orbit") : ""));
     if (on_planet) {
-        std::string l = kBig + kNum + Fmt(s["lat"].get<double>(), s["lon"].get<double>());
-        if (s.value("in_orbit", false)) l += " \xC2\xB7 " + tr("in_orbit");
-        out.push_back(l);
+        out.push_back(kBig + kNum + tr("tag_now") + "\t" + Fmt(s["lat"].get<double>(), s["lon"].get<double>()));
     } else if (s.contains("place") && s["place"].is_object() && !s["place"].value("title", std::string()).empty()) {
         // En una estacion: estacion y debajo, mas pequeno, sistema y galaxia. En el espacio: sistema y galaxia.
         out.push_back(kBig + s["place"].value("title", std::string()));
@@ -195,8 +199,9 @@ std::string BoxLines(const Json& s, const std::string& lang) {
     }
     if (d) {
         double dlat = (*d).value("lat", 0.0), dlon = (*d).value("lon", 0.0);
-        out.push_back(kDest + kNum + Fmt(dlat, dlon));
         std::string name = (*d).contains("name") && (*d)["name"].is_string() ? (*d)["name"].get<std::string>() : "";
+        // Igual que el .exe: coordenadas y el nombre al lado; debajo "a 221.0 km · rumbo 54° NE".
+        out.push_back(kDest + kNum + tr("tag_dest") + "\t" + Fmt(dlat, dlon) + (name.empty() ? "" : "  " + name));
         double m = (*d).contains("distance_m") && (*d)["distance_m"].is_number() ? (*d)["distance_m"].get<double>() : 0;
         char buf[64];
         if (m < 1000)
@@ -204,8 +209,12 @@ std::string BoxLines(const Json& s, const std::string& lang) {
         else
             std::snprintf(buf, sizeof(buf), "%.1f km", m / 1000);
         std::string card = (*d).contains("cardinal") && (*d)["cardinal"].is_string() ? (*d)["cardinal"].get<std::string>() : "";
-        out.push_back(kSmall + "\xC2\xBB " + (name.empty() ? std::string() : name + " \xC2\xB7 ") + buf +
-                      (card.empty() ? "" : " " + card));
+        int bearing = (*d).contains("bearing") && (*d)["bearing"].is_number() ? (*d)["bearing"].get<int>() : 0;
+        std::string info = tr("dest_info");
+        info.replace(info.find("{dist}"), 6, buf);
+        info.replace(info.find("{bearing}"), 9, std::to_string(bearing));
+        info.replace(info.find("{cardinal}"), 10, card);
+        out.push_back(kDestSmall + info);
     }
     std::string text;
     for (size_t i = 0; i < out.size(); ++i) text += (i ? "\n" : "") + out[i];

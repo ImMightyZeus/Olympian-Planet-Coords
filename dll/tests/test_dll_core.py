@@ -141,7 +141,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.6" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.7" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -181,7 +181,8 @@ def test_destino_y_llegada_igual_que_python(exe):
     brg = py.initial_bearing(lat, lon, 15.0, -40.0)
     u = py.latlon_to_unit(15.0, -40.0, 0, False)
     target = tuple(c + k * R for c, k in zip(CENTER, u))
-    yaw, pitch = py.relative_direction(tuple(pos_at(lat, lon)), target, (0.95, 0, -0.3), (0, 1, 0), tuple(at), True)
+    yaw, pitch = py.surface_direction(tuple(pos_at(lat, lon)), CENTER, target, (0.95, 0, -0.3), tuple(at), True,
+                                      dist, R)
     assert d["name"] == "Torre" and d["lat"] == 15.0 and d["lon"] == -40.0, d
     assert abs(d["distance_m"] - round(dist, 1)) <= 0.1, (d, dist)
     assert d["bearing"] == round(brg) and d["cardinal"] == py.cardinal(brg, "es"), (d, brg)
@@ -408,6 +409,15 @@ def test_flecha_igual_que_python(exe):
     h.close()
 
 
+def py_ov_tr(lang, key, **kw):
+    """Texto del recuadro .exe (para comparar con el recuadro dentro del juego)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ov", os.path.join(ROOT, "overlay", "olympian_overlay.py"))
+    ov = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ov)
+    return ov.STRINGS[lang][key].format(**kw)
+
+
 @test
 def test_recuadro_de_siempre_destino_y_flecha(exe):
     """Recuadro con el panel cerrado: coordenadas, coordenadas del destino (azul), nombre/distancia/rumbo,
@@ -415,14 +425,16 @@ def test_recuadro_de_siempre_destino_y_flecha(exe):
     h = Harness([exe, "core", os.path.join(tempfile.mkdtemp(), "datos.json")])
     h.ask(frame(12.0, -45.0, 0))
     r = h.ask({"box": True})
-    assert r["text"].split("\n") == ["\x1a0.0;0.0;1", "\x10OLYMPIAN PLANET COORDS", "\x11\x01+12.00, -45.00"], r
+    assert r["text"].split("\n") == ["\x1a0.0;0.0;1", "\x10OLYMPIAN PLANET COORDS", "\x11\x01AHORA\t+12.00, -45.00"], r
     h.ask({"put": "marker", "query": {"lat": "20", "lon": "54", "name": "test 001"}})
     s = h.ask(frame(12.0, -45.0, 2.0))
     d = s["destination"]
     lines = h.ask({"box": True})["text"].split("\n")
     assert lines[0] == f"\x1a{d['yaw']:.1f};{d['pitch']:.1f};0", lines
-    assert lines[2] == "\x11\x01+12.00, -45.00" and lines[3] == "\x19\x01+20.00, +54.00", lines
-    assert lines[4] == f"\x12» test 001 · {d['distance_m'] / 1000:.1f} km {d['cardinal']}", lines
+    # como el .exe: fila AHORA, fila DESTINO con el nombre al lado y debajo "a X km · rumbo N° NE"
+    assert lines[2] == "\x11\x01AHORA\t+12.00, -45.00" and lines[3] == "\x19\x01DESTINO\t+20.00, +54.00  test 001", lines
+    assert lines[4] == "\x1c" + py_ov_tr("es", "dest_info", dist=f"{d['distance_m'] / 1000:.1f} km",
+                                         bearing=d["bearing"], cardinal=d["cardinal"]), lines
     h.ask({"put": "size", "query": {"size": "grande"}})
     h.ask(frame(12.0, -45.0, 2.1))
     assert h.ask({"box": True})["text"].startswith("\x1bG\n")

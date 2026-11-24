@@ -416,6 +416,32 @@ def relative_direction(origin, target, right, up, at, flip_forward=False) -> tup
     return yaw, pitch
 
 
+def surface_direction(origin, center, target, right, at, flip_forward, surface_dist, radius) -> tuple[float, float]:
+    """Direccion para la flecha. relative_direction() usa la linea recta: a cientos de km el punto queda
+    "dentro" del planeta y la flecha apunta hacia abajo (hacia ti), y la inclinacion del cuerpo o de la
+    nave la tuerce. Aqui el yaw se mide en el plano del suelo (perpendicular a la vertical del planeta) y
+    el pitch como si el suelo fuera plano: tu altura sobre el destino contra la distancia por la
+    superficie (lejos, casi plana; encima del destino, hacia abajo)."""
+    up = (origin[0] - center[0], origin[1] - center[1], origin[2] - center[2])
+    ul = math.sqrt(up[0] ** 2 + up[1] ** 2 + up[2] ** 2)
+    if ul <= 0:
+        return 0.0, 0.0
+    up = (up[0] / ul, up[1] / ul, up[2] / ul)
+
+    def dot(a, b):
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+    def flat(v):
+        k = dot(v, up)
+        return (v[0] - k * up[0], v[1] - k * up[1], v[2] - k * up[2])
+
+    s = -1.0 if flip_forward else 1.0
+    h = flat((target[0] - origin[0], target[1] - origin[1], target[2] - origin[2]))
+    yaw = math.degrees(math.atan2(dot(h, flat(right)) * s, dot(h, flat(at)) * s))
+    pitch = math.degrees(math.atan2(-(ul - radius), max(surface_dist, 1.0)))
+    return yaw, max(-89.0, min(89.0, pitch))
+
+
 _CARDINALS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
 
 
@@ -976,7 +1002,7 @@ class OlympianPlanetCoords(Mod):
                 c, r = ctx["center"], ctx["radius"]
                 target = (c[0] + ux * r, c[1] + uy * r, c[2] + uz * r)
                 right, up, at = ctx["basis"]
-                yaw, pitch = relative_direction(ctx["world"], target, right, up, at, self.arrow_flip)
+                yaw, pitch = surface_direction(ctx["world"], c, target, right, at, self.arrow_flip, dist, r)
                 dest_info["yaw"], dest_info["pitch"] = round(yaw, 1), round(pitch, 1)
             except Exception:
                 pass

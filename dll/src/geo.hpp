@@ -5,6 +5,7 @@
 // Sin dependencias del juego ni de Windows: se prueba en Linux contra la version Python.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -103,6 +104,36 @@ inline void RelativeDirection(const Vec3& origin, const Vec3& target, const Vec3
     double fwd = Dot(d, at) * s, side = Dot(d, right) * s, vert = Dot(d, up);
     *yaw = Deg(std::atan2(side, fwd));
     *pitch = Deg(std::atan2(vert, std::hypot(side, fwd)));
+}
+
+// Direccion para la flecha (igual que surface_direction() de Python). La de RelativeDirection usa la
+// linea recta al punto: a cientos de km el punto queda "dentro" del planeta y la flecha apunta hacia
+// abajo (hacia ti), y cualquier inclinacion del cuerpo o de la nave la tuerce. Aqui:
+//  * yaw: en el plano del suelo (perpendicular a la vertical del planeta en tu posicion): hacia donde
+//    queda el destino respecto a hacia donde miras, sin importar cuanto estes inclinado;
+//  * pitch: como si el suelo fuera plano: tu altura sobre el destino (radio del planeta) contra la
+//    distancia por la superficie. Lejos queda casi plana; encima del destino apunta hacia abajo.
+inline void SurfaceDirection(const Vec3& origin, const Vec3& center, const Vec3& target, const Vec3& right,
+                             const Vec3& at, bool flip_forward, double surface_dist, double radius, double* yaw,
+                             double* pitch) {
+    Vec3 up = Sub(origin, center);
+    double ul = std::sqrt(Dot(up, up));
+    if (ul <= 0) {
+        *yaw = 0;
+        *pitch = 0;
+        return;
+    }
+    up = Vec3{up.x / ul, up.y / ul, up.z / ul};
+    auto flat = [&up](const Vec3& v) {
+        double k = Dot(v, up);
+        return Vec3{v.x - k * up.x, v.y - k * up.y, v.z - k * up.z};
+    };
+    double s = flip_forward ? -1.0 : 1.0;
+    Vec3 h = flat(Sub(target, origin)), f = flat(at), r = flat(right);
+    *yaw = Deg(std::atan2(Dot(h, r) * s, Dot(h, f) * s));
+    double alt = ul - radius;
+    double p = Deg(std::atan2(-alt, std::max(surface_dist, 1.0)));
+    *pitch = std::max(-89.0, std::min(89.0, p));
 }
 
 // Redondeo como round() de Python: redondea el valor binario exacto (2.675 -> 2.67), igual que

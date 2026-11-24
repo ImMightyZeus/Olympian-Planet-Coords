@@ -449,7 +449,7 @@ void Core::Tick(const GameView* view, double now) {
         geo::Vec3 u = geo::LatLonToUnit(dlat, dlon, convention, invert_lat);
         geo::Vec3 target{center.x + u.x * radius, center.y + u.y * radius, center.z + u.z * radius};
         double yaw = 0, pitch = 0;
-        geo::RelativeDirection(world, target, view->tm_right, view->tm_up, view->tm_at, arrow_flip, &yaw, &pitch);
+        geo::SurfaceDirection(world, center, target, view->tm_right, view->tm_at, arrow_flip, dist, radius, &yaw, &pitch);
         dest_info["yaw"] = geo::RoundTo(yaw, 1);
         dest_info["pitch"] = geo::RoundTo(pitch, 1);
         if (!in_orbit && stable && dist <= kArrivalMeters) {

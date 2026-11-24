@@ -140,17 +140,22 @@ bool Supported(VkFormat f, bool* bgra) {
     }
 }
 
-// Estilo de cada linea (codigos en vk_overlay.hpp). Sin codigo: linea 1 titulo, 2 grande, 3 pequena.
+// Estilo de cada linea (codigos en vk_overlay.hpp). Tamanos en puntos, los mismos del recuadro .exe
+// (FONT_SIZES de overlay/olympian_overlay.py): Normal = num/texto 8, pequena 6, casilla 8; Grande = 15,
+// 10, 14. Como en el .exe, los puntos pasan a pixeles con el DPI de Windows (96 = 100 %), no con la
+// resolucion. Sin codigo: linea 1 titulo, 2 grande, 3 pequena.
 struct LineStyle {
-    int size;          // px a escala 1
+    double pt_normal, pt_big;
     COLORREF color;
     bool bold;
-    int fill;          // 0 nada, 1 fila elegida, 2 casilla de texto
+    int fill;  // 0 nada, 1 fila elegida, 2 casilla de texto
 };
 struct Line {
     std::wstring text;
     LineStyle st;
     bool numeric = false;
+    double pt = 8;      // puntos (segun Normal / Grande)
+    double tag_pt = 6;  // etiqueta antes del tabulador (AHORA, DESTINO)
 };
 // Lo que se dibuja: lineas, si es el panel, tamano Grande y la flecha.
 struct Layout {
@@ -161,25 +166,30 @@ struct Layout {
     double yaw = 0, pitch = 0, morph = 1;
 };
 
+// Colores del recuadro .exe
+constexpr COLORREF kFg = RGB(0xE8, 0xF1, 0xF2), kMuted = RGB(0x88, 0x99, 0xA6), kAccent = RGB(0xF2, 0xB1, 0x34),
+                   kDestColor = RGB(0x7F, 0xD4, 0xFF);
+
 LineStyle StyleFor(wchar_t code, size_t index, bool* coded) {
     *coded = true;
     switch (code) {
-        case kStyleTitle: return {14, RGB(232, 163, 61), true, 0};
-        case kStyleBig: return {24, RGB(240, 240, 240), false, 0};
-        case kStyleSmall: return {14, RGB(160, 164, 172), false, 0};
-        case kStyleItem: return {16, RGB(225, 225, 225), false, 0};
-        case kStyleSelected: return {16, RGB(255, 255, 255), false, 1};
-        case kStyleError: return {15, RGB(240, 100, 100), false, 0};
-        case kStyleLabel: return {15, RGB(232, 163, 61), false, 0};
-        case kStyleInput: return {18, RGB(255, 255, 255), false, 2};
-        case kStyleOk: return {15, RGB(120, 210, 140), false, 0};
-        case kStyleDest: return {19, RGB(127, 212, 255), false, 0};  // azul del destino (#7FD4FF)
+        case kStyleTitle: return {6, 10, kAccent, false, 0};
+        case kStyleBig: return {8, 15, kFg, false, 0};
+        case kStyleSmall: return {6, 10, kMuted, false, 0};
+        case kStyleItem: return {8, 14, kFg, false, 0};
+        case kStyleSelected: return {8, 14, RGB(255, 255, 255), false, 1};
+        case kStyleError: return {6, 10, RGB(240, 100, 100), false, 0};
+        case kStyleLabel: return {6, 10, kAccent, false, 0};
+        case kStyleInput: return {8, 14, kFg, false, 2};
+        case kStyleOk: return {6, 10, RGB(120, 210, 140), false, 0};
+        case kStyleDest: return {8, 15, kDestColor, false, 0};
+        case kStyleDestSmall: return {6, 10, kDestColor, false, 0};
         default: break;
     }
     *coded = false;
-    if (index == 0) return {14, RGB(232, 163, 61), true, 0};
-    if (index == 1) return {24, RGB(240, 240, 240), false, 0};
-    return {16, RGB(176, 176, 176), false, 0};
+    if (index == 0) return {6, 10, kAccent, false, 0};
+    if (index == 1) return {8, 15, kFg, false, 0};
+    return {6, 10, kMuted, false, 0};
 }
 
 // Lineas del texto. Sin codigos de estilo: maximo 3 (texto simple). Con codigos: hasta 24. Las lineas
@@ -221,10 +231,40 @@ Layout ParseLayout(const std::wstring& text) {
         a = b + 1;
     }
     if (!styled && L.lines.size() > 3) L.lines.resize(3);
+    for (auto& l : L.lines) {
+        l.pt = L.big ? l.st.pt_big : l.st.pt_normal;
+        l.tag_pt = L.big ? 10 : 6;
+    }
     return L;
 }
 
-int LineStep(const Line& l) { return l.st.size + (l.st.fill ? 11 : 7); }
+// Puntos -> pixeles a la escala s (s = DPI / 96).
+int Px(double pt, double s) { return std::max(6, static_cast<int>(std::lround(pt * s * 96.0 / 72.0))); }
+
+// Alto de una linea (como el de una etiqueta de tk: el alto de la letra), mas margen si tiene fondo.
+int LineStep(const Line& l, double s) {
+    return static_cast<int>(std::lround(Px(l.pt, s) * 1.32)) + (l.st.fill ? static_cast<int>(std::lround(6 * s)) : 0);
+}
+
+// DPI de Windows (el mismo que usaba el recuadro .exe para pasar puntos a pixeles). El juego puede
+// no ser "consciente del DPI" (Windows le diria 96), asi que primero se lee el valor aplicado.
+double SystemDpi() {
+    static double dpi = 0;
+    if (dpi > 0) return dpi;
+    DWORD v = 0, sz = sizeof(v);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop\\WindowMetrics", L"AppliedDPI", RRF_RT_REG_DWORD,
+                     nullptr, &v, &sz) == ERROR_SUCCESS &&
+        v >= 72 && v <= 480) {
+        dpi = v;
+    } else if (HMODULE u = GetModuleHandleW(L"user32")) {
+        using Fn = UINT(WINAPI*)();
+        auto f = reinterpret_cast<Fn>(reinterpret_cast<void*>(GetProcAddress(u, "GetDpiForSystem")));
+        dpi = f ? f() : 96;
+    }
+    if (dpi < 72 || dpi > 480) dpi = 96;
+    if (g_log) g_log("[overlay] DPI de Windows: %.0f (escala %.0f %%)", dpi, dpi / 96.0 * 100);
+    return dpi;
+}
 
 // Fuentes privadas del proceso (no se instalan en Windows). Se cargan una vez.
 bool g_fonts_tried = false, g_font_num = false, g_font_text = false;
@@ -253,43 +293,65 @@ const wchar_t* TextFamily(const std::wstring& t) {
     return g_font_text ? L"Share Tech Mono" : L"Consolas";
 }
 
-// Dibuja una linea con su baseline en 'y + ascent' (o solo la mide si draw es false). Devuelve el ancho.
-// Mismo estilo que el recuadro .exe: digitos y punto en DSEG7, lo demas en Share Tech Mono; las letras
-// que esa fuente no tiene (flechas, otros alfabetos) van en Segoe UI, que Windows completa con sus
-// fuentes de reserva.
+HFONT MakeFont(int px, bool bold, const wchar_t* family) {
+    return CreateFontW(-px, 0, 0, 0, bold ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                       CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, family);
+}
+
+// Dibuja una linea (o solo la mide si draw es false). Devuelve el ancho. Como en el .exe: digitos y
+// punto en DSEG7 (negrita), lo demas en Share Tech Mono; las letras que esa fuente no tiene (flechas,
+// otros alfabetos) van en Segoe UI, que Windows completa con sus fuentes de reserva. Lo que va antes de
+// un tabulador es la etiqueta (AHORA, DESTINO): pequena, gris y de 8 letras de ancho, como en el .exe.
 int DrawLine(HDC dc, const Line& l, double s, int x0, int y, int right, int clip_bottom, bool draw) {
-    const std::wstring& line = l.text;
+    std::wstring line = l.text, tag;
+    size_t tab = line.find(L'\t');
+    if (tab != std::wstring::npos) {
+        tag = line.substr(0, tab);
+        line.erase(0, tab + 1);
+    }
     const LineStyle& st = l.st;
-    int px = static_cast<int>(std::lround(st.size * s));
-    HFONT ft = CreateFontW(-px, 0, 0, 0, st.bold ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                           CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FIXED_PITCH, TextFamily(line));
-    HFONT fn = l.numeric ? CreateFontW(-static_cast<int>(std::lround(px * 0.86)), 0, 0, 0, FW_BOLD, 0, 0, 0,
-                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                                       DEFAULT_PITCH, NumFamily())
-                         : nullptr;
+    const int px = Px(l.pt, s);
+    HFONT ft = MakeFont(px, st.bold, TextFamily(line));
+    HFONT fn = l.numeric ? MakeFont(px, true, NumFamily()) : nullptr;
     HGDIOBJ of = SelectObject(dc, ft);
-    SetTextColor(dc, st.color);
     TEXTMETRICW tm{};
     GetTextMetricsW(dc, &tm);
     const int baseline = y + tm.tmAscent;
     SetTextAlign(dc, TA_LEFT | TA_BASELINE | TA_NOUPDATECP);
+    int x = x0;
+    if (tab != std::wstring::npos) {
+        HFONT fa = MakeFont(Px(l.tag_pt, s), false, TextFamily(tag));
+        SelectObject(dc, fa);
+        SIZE cell{};
+        GetTextExtentPoint32W(dc, L"00000000", 8, &cell);
+        if (draw) {
+            SetTextColor(dc, kMuted);
+            RECT clip{x, y, right, clip_bottom};
+            ExtTextOutW(dc, x, baseline, ETO_CLIPPED, &clip, tag.c_str(), static_cast<UINT>(tag.size()), nullptr);
+        }
+        SIZE tsz{};
+        GetTextExtentPoint32W(dc, tag.c_str(), static_cast<int>(tag.size()), &tsz);
+        x += std::max(cell.cx, tsz.cx + static_cast<int>(std::lround(4 * s)));
+        SelectObject(dc, ft);
+        DeleteObject(fa);
+    }
+    SetTextColor(dc, st.color);
     std::vector<WORD> glyphs(line.size() + 1, 0);
     if (!line.empty())
         GetGlyphIndicesW(dc, line.c_str(), static_cast<int>(line.size()), glyphs.data(), GGI_MARK_NONEXISTING_GLYPHS);
     HFONT fb = nullptr;
+    // Las coordenadas terminan en el primer doble espacio: lo que sigue (el nombre) va en letra normal.
+    const size_t num_end = line.find(L"  ");
     auto cls = [&](size_t k) {  // 0 = digito DSEG7, 1 = fuente de texto, 2 = reserva
-        if (l.numeric && fn && (iswdigit(line[k]) || line[k] == L'.')) return 0;
+        if (l.numeric && fn && k < num_end && (iswdigit(line[k]) || line[k] == L'.')) return 0;
         return glyphs[k] == 0xFFFF ? 2 : 1;
     };
-    int x = x0;
     size_t k = 0;
     while (k < line.size() && x < right) {
         int c = cls(k);
         size_t e = k + 1;
         while (e < line.size() && cls(e) == c) ++e;
-        if (c == 2 && !fb)
-            fb = CreateFontW(-px, 0, 0, 0, st.bold ? FW_BOLD : FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                             CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+        if (c == 2 && !fb) fb = MakeFont(px, st.bold, L"Segoe UI");
         SelectObject(dc, c == 0 ? fn : c == 2 && fb ? fb : ft);
         SIZE sz{};
         GetTextExtentPoint32W(dc, line.c_str() + k, static_cast<int>(e - k), &sz);
@@ -297,7 +359,7 @@ int DrawLine(HDC dc, const Line& l, double s, int x0, int y, int right, int clip
             RECT clip{x, y, right, clip_bottom};
             ExtTextOutW(dc, x, baseline, ETO_CLIPPED, &clip, line.c_str() + k, static_cast<UINT>(e - k), nullptr);
         }
-        x += sz.cx + (c == 0 ? static_cast<int>(std::lround(2 * s)) : 0);
+        x += sz.cx;
         k = e;
     }
     if (fb) DeleteObject(fb);
@@ -307,25 +369,32 @@ int DrawLine(HDC dc, const Line& l, double s, int x0, int y, int right, int clip
     return x - x0;
 }
 
-constexpr double kArrowUnits = 70;  // lado de la flecha (px a escala 1)
+// Margenes (como el marco del .exe: 10 px a los lados, 6 arriba y abajo), mas la barra de color.
+int PadX(double s) { return static_cast<int>(std::lround(14 * s)); }  // barra 4 + 10
+int PadY(double s) { return static_cast<int>(std::lround(6 * s)); }
+int ContentHeight(const Layout& L, double s) {
+    int hh = 0;
+    for (const auto& l : L.lines) hh += LineStep(l, s);
+    return hh;
+}
+// La flecha: un cuadrado del alto del texto (en el .exe, del alto del recuadro), minimo 24 px.
+int ArrowSize(const Layout& L, double s) {
+    return L.arrow ? std::max(static_cast<int>(std::lround(24 * s)), ContentHeight(L, s)) : 0;
+}
 
 // Medidas del recuadro a escala s: ancho justo para el texto (y la flecha), alto segun las lineas.
-void Measure(const Layout& L, double s, int* w, int* h, int* text_w) {
+void Measure(const Layout& L, double s, int* w, int* h) {
     EnsureFonts();
     static HDC dc = CreateCompatibleDC(nullptr);
     int maxw = 0;
     for (const auto& l : L.lines) maxw = std::max(maxw, DrawLine(dc, l, s, 0, 0, INT_MAX / 2, 0, false));
-    *text_w = maxw;
-    int units = 8 + 6;
-    for (const auto& l : L.lines) units += LineStep(l);
-    int arrow = L.arrow ? static_cast<int>(std::lround((kArrowUnits + 14) * s)) : 0;
-    *w = static_cast<int>(std::lround(14 * s)) + maxw + arrow + static_cast<int>(std::lround(16 * s));
-    *w = std::max(*w, static_cast<int>(std::lround((L.panel ? 420 : 220) * s)));
-    *h = static_cast<int>(std::lround(units * s));
-    if (L.arrow) *h = std::max(*h, static_cast<int>(std::lround((kArrowUnits + 16) * s)));
+    const int a = ArrowSize(L, s);
+    *w = PadX(s) + maxw + (a ? static_cast<int>(std::lround(8 * s)) + a : 0) + static_cast<int>(std::lround(10 * s));
+    *h = 2 * PadY(s) + std::max(ContentHeight(L, s), a);
 }
 
-// Tamano del recuadro segun la altura de la imagen (1080 = escala 1), el tamano elegido y el texto.
+// Tamano del recuadro: DPI de Windows (como el .exe), tamano elegido y texto. Si no cabe en la imagen o
+// en el bufer, se achica todo junto.
 void BoxSize(VkExtent2D e, const std::wstring& text, uint32_t* w, uint32_t* h, double* scale) {
     static std::wstring last_text;
     static VkExtent2D last_e{};
@@ -338,16 +407,17 @@ void BoxSize(VkExtent2D e, const std::wstring& text, uint32_t* w, uint32_t* h, d
         return;
     }
     Layout L = ParseLayout(text);
-    double s = std::clamp(e.height / 1080.0, 0.75, 2.5) * (L.big ? 1.35 : 1.0);
-    int iw = 0, ih = 0, tw = 0;
-    for (int tries = 0; tries < 20; ++tries) {
-        Measure(L, s, &iw, &ih, &tw);
-        *w = std::min<uint32_t>(static_cast<uint32_t>(iw), e.width);
-        *h = std::min<uint32_t>(static_cast<uint32_t>(ih), e.height);
-        // Si no cabe en el bufer (pantallas muy grandes), se achica la escala entera, no solo el recuadro.
-        if (static_cast<VkDeviceSize>(*w) * *h * 4 <= kMaxBytes || s <= 0.5) break;
+    double s = SystemDpi() / 96.0;
+    int iw = 0, ih = 0;
+    for (int tries = 0; tries < 30; ++tries) {
+        Measure(L, s, &iw, &ih);
+        bool fits = iw <= static_cast<int>(e.width) * 0.9 && ih <= static_cast<int>(e.height) * 0.9 &&
+                    static_cast<VkDeviceSize>(iw) * ih * 4 <= kMaxBytes;
+        if (fits || s <= 0.5) break;
         s *= 0.9;
     }
+    *w = std::min<uint32_t>(static_cast<uint32_t>(iw), e.width);
+    *h = std::min<uint32_t>(static_cast<uint32_t>(ih), e.height);
     *scale = s;
     last_text = text;
     last_e = e;
@@ -357,7 +427,7 @@ void BoxSize(VkExtent2D e, const std::wstring& text, uint32_t* w, uint32_t* h, d
 }
 
 // Flecha 3D (igual que la del recuadro .exe): se dibuja a 4x con GDI y se reduce (bordes suaves).
-void DrawArrow(uint32_t* p, uint32_t w, uint32_t h, int ox, int oy, int size, const Layout& L, double s) {
+void DrawArrow(uint32_t* p, uint32_t w, uint32_t h, int ox, int oy, int size, const Layout& L) {
     if (size < 8) return;
     const int ss = 4, big = size * ss;
     HDC dc = CreateCompatibleDC(nullptr);
@@ -380,27 +450,25 @@ void DrawArrow(uint32_t* p, uint32_t w, uint32_t h, int ox, int oy, int size, co
     for (int i = 0; i < big * big; ++i) q[i] = 0x14181E;  // fondo del recuadro
     olympian::ArrowGeo g = olympian::ArrowGeometry(L.yaw, L.pitch, L.morph);
     const double k = big / 80.0, c = big / 2.0, px = size / 80.0;
-    // circulo
     int ring_w = std::max(ss, static_cast<int>(std::lround(1.8 * px * ss)));
     HPEN ring = CreatePen(PS_SOLID, ring_w, RGB(0xA8, 0x74, 0x0F));
     HGDIOBJ op = SelectObject(dc, ring);
     HGDIOBJ ob = SelectObject(dc, GetStockObject(NULL_BRUSH));
     int rr = static_cast<int>(std::lround(g.ring_r * k));
     Ellipse(dc, static_cast<int>(c) - rr, static_cast<int>(c) - rr, static_cast<int>(c) + rr, static_cast<int>(c) + rr);
-    // caras de la flecha (de la mas lejana a la mas cercana)
     HPEN edge = CreatePen(PS_SOLID, std::max(1, static_cast<int>(std::lround(0.8 * px * ss))), RGB(0xFF, 0xE7, 0xA8));
     SelectObject(dc, edge);
     for (const auto& f : g.faces) {
         POINT pts[3];
         for (int i = 0; i < 3; ++i)
-            pts[i] = POINT{static_cast<LONG>(std::lround(c + f.pts[i * 2] * k)), static_cast<LONG>(std::lround(c + f.pts[i * 2 + 1] * k))};
+            pts[i] = POINT{static_cast<LONG>(std::lround(c + f.pts[i * 2] * k)),
+                           static_cast<LONG>(std::lround(c + f.pts[i * 2 + 1] * k))};
         HBRUSH br = CreateSolidBrush(RGB(f.r, f.g, f.b));
         HGDIOBJ obr = SelectObject(dc, br);
         Polygon(dc, pts, 3);
         SelectObject(dc, obr);
         DeleteObject(br);
     }
-    // esfera en reposo (sin destino)
     SelectObject(dc, GetStockObject(NULL_PEN));
     for (const auto& sph : g.sphere) {
         HBRUSH br = CreateSolidBrush(RGB(sph.red, sph.green, sph.blue));
@@ -416,8 +484,7 @@ void DrawArrow(uint32_t* p, uint32_t w, uint32_t h, int ox, int oy, int size, co
     DeleteObject(ring);
     DeleteObject(edge);
     GdiFlush();
-    // Reducir 4x4 -> 1 (promedio) sobre el recuadro
-    for (int y = 0; y < size; ++y) {
+    for (int y = 0; y < size; ++y) {  // reducir 4x4 -> 1 (promedio)
         int py = oy + y;
         if (py < 1 || py + 1 >= static_cast<int>(h)) continue;
         for (int x = 0; x < size; ++x) {
@@ -435,7 +502,6 @@ void DrawArrow(uint32_t* p, uint32_t w, uint32_t h, int ox, int oy, int size, co
             p[py * w + pxx] = ((r / n) << 16) | ((gg / n) << 8) | (b / n);
         }
     }
-    (void)s;
     SelectObject(dc, old);
     DeleteObject(bmp);
     DeleteDC(dc);
@@ -474,38 +540,36 @@ void Rasterize(const std::wstring& text, uint32_t w, uint32_t h, double s, bool 
     SetBkMode(dc, TRANSPARENT);
     EnsureFonts();
     Layout L = ParseLayout(text);
-    const int arrow_px = L.arrow ? static_cast<int>(std::lround(kArrowUnits * s)) : 0;
-    const int x0 = static_cast<int>(std::lround(14 * s));
-    // el texto termina antes de la flecha
-    const int text_right = static_cast<int>(w) - x0 / 2 - (L.arrow ? arrow_px + static_cast<int>(std::lround(14 * s)) : 0);
-    int y = static_cast<int>(std::lround(8 * s));
+    const int arrow_px = ArrowSize(L, s);
+    const int x0 = PadX(s);
+    const int text_right =
+        static_cast<int>(w) - static_cast<int>(std::lround(6 * s)) - (arrow_px ? arrow_px + static_cast<int>(std::lround(8 * s)) : 0);
+    int y = PadY(s);
     for (size_t i = 0; i < L.lines.size(); ++i) {
         const Line& line = L.lines[i];
         const LineStyle& st = line.st;
-        const int step = static_cast<int>(std::lround(LineStep(line) * s));
+        const int step = LineStep(line, s);
+        int ty = y;
         if (st.fill) {  // fila elegida o casilla de texto: fondo propio
             const uint32_t fc = st.fill == 1 ? 0x3A4660 : 0x07090D;
             const uint32_t fe = st.fill == 1 ? 0xE8A33D : 0x5A6270;
-            int y0 = y - static_cast<int>(std::lround(2 * s)),
-                y1 = std::min<int>(y + step - static_cast<int>(std::lround(4 * s)), static_cast<int>(h) - 2);
-            int xa = x0 - static_cast<int>(std::lround(6 * s)), xb = static_cast<int>(w) - static_cast<int>(std::lround(8 * s));
+            int y0 = y + static_cast<int>(std::lround(1 * s)), y1 = std::min<int>(y + step - static_cast<int>(std::lround(1 * s)), static_cast<int>(h) - 2);
+            int xa = x0 - static_cast<int>(std::lround(5 * s)), xb = static_cast<int>(w) - static_cast<int>(std::lround(6 * s));
             for (int yy = std::max(1, y0); yy < y1; ++yy)
                 for (int xx = std::max(1, xa); xx < xb; ++xx) {
                     bool ed = st.fill == 1 ? xx < xa + static_cast<int>(std::lround(3 * s))
                                            : (yy == std::max(1, y0) || yy + 1 == y1 || xx == std::max(1, xa) || xx + 1 == xb);
                     p[yy * w + xx] = ed ? fe : fc;
                 }
-            y += static_cast<int>(std::lround(2 * s));
+            ty = y + static_cast<int>(std::lround(3 * s));
         }
-        DrawLine(dc, line, s, x0, y, i == 0 ? static_cast<int>(w) - x0 / 2 : text_right, static_cast<int>(h), true);
-        y += step - (st.fill ? static_cast<int>(std::lround(2 * s)) : 0);
+        DrawLine(dc, line, s, x0, ty, i == 0 ? static_cast<int>(w) - x0 / 2 : text_right, static_cast<int>(h), true);
+        y += step;
     }
     GdiFlush();
-    if (L.arrow) {  // a la derecha, debajo del titulo, centrada en el alto que queda
-        int top = static_cast<int>(std::lround(8 * s));
-        int ay = top + std::max(0, (static_cast<int>(h) - top - arrow_px) / 2);
-        DrawArrow(p, w, h, static_cast<int>(w) - x0 - arrow_px + static_cast<int>(std::lround(4 * s)), ay, arrow_px, L, s);
-    }
+    if (arrow_px)  // a la derecha, centrada en el alto del recuadro
+        DrawArrow(p, w, h, static_cast<int>(w) - static_cast<int>(std::lround(8 * s)) - arrow_px,
+                  (static_cast<int>(h) - arrow_px) / 2, arrow_px, L);
     for (size_t i = 0; i < g_raster.px.size(); ++i) {
         uint32_t c = p[i] & 0x00FFFFFF;  // GDI deja el alfa en 0: el recuadro es opaco
         if (!bgra) c = (c & 0x0000FF00) | ((c & 0xFF) << 16) | ((c >> 16) & 0xFF);

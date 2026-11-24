@@ -43,6 +43,7 @@
 #include <vector>
 
 #include <atomic>
+#include <cmath>
 #include <memory>
 
 #include "MinHook.h"
@@ -58,7 +59,7 @@
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.6"
+#define OLYMPIAN_VERSION "0.2.0-dev.7"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -431,6 +432,32 @@ std::wstring BoxText() {
     }
     olympian::Json s = olympian::Json::parse(c->CoordsJson(), nullptr, false);
     if (s.is_discarded()) return L"";
+    // Flecha suave, como en el .exe: se acerca al angulo nuevo por el camino corto (12 por segundo).
+    static bool have = false;
+    static double sy = 0, sp = 0;
+    static ULONGLONG last = 0;
+    ULONGLONG now = GetTickCount64();
+    if (s.contains("destination") && s["destination"].is_object() && s["destination"].contains("yaw") &&
+        s["destination"]["yaw"].is_number()) {
+        double ty = s["destination"]["yaw"].get<double>(), tp = s["destination"].value("pitch", 0.0);
+        if (!have) {
+            sy = ty;
+            sp = tp;
+            have = true;
+        } else {
+            double dt = std::min(0.2, (now - last) / 1000.0), f = 1.0 - std::exp(-dt * 12.0);
+            double diff = std::fmod(ty - sy + 540.0, 360.0) - 180.0;
+            sy += diff * f;
+            if (sy > 180) sy -= 360;
+            if (sy < -180) sy += 360;
+            sp += (tp - sp) * f;
+        }
+        s["destination"]["yaw"] = sy;
+        s["destination"]["pitch"] = sp;
+    } else {
+        have = false;
+    }
+    last = now;
     return Wide(olympian::BoxLines(s, c->Lang()));
 }
 

@@ -857,6 +857,35 @@ def test_lista_de_destinos_por_planeta():
     assert m.http_coords["history"] == [], m.http_coords["history"]
 
 
+def test_flecha_en_el_plano_del_suelo():
+    """La flecha mide el giro en el plano del suelo y la inclinacion como si el suelo fuera plano: un
+    destino lejano (detras de la curva del planeta) queda de frente y casi plano, no "hacia ti"; inclinar
+    el cuerpo o la nave no cambia el giro."""
+    R, C = 1000.0, (0.0, 0.0, 0.0)
+    me = (0.0, R, 0.0)  # polo norte; el suelo es el plano x-z
+    far = (math.sin(2.0) * R, math.cos(2.0) * R, 0.0)  # a 2 rad (2000 m) por la superficie, hacia +x
+    right, at = (0.0, 0.0, -1.0), (1.0, 0.0, 0.0)  # mirando hacia +x
+    y, p = mod.surface_direction(me, C, far, right, at, False, 2000.0, R)
+    assert abs(y) < 1e-6 and abs(p) < 1e-6, (y, p)
+    yr, pr = mod.relative_direction(me, far, right, (0, 1, 0), at)
+    assert pr < -55, pr  # la linea recta apunta muy hacia abajo: lo que se veia raro en el juego
+    # cuerpo inclinado 40 grados hacia adelante: el giro sigue en 0
+    t = math.radians(40)
+    at_t = (math.cos(t), -math.sin(t), 0.0)
+    y2, _ = mod.surface_direction(me, C, far, right, at_t, False, 2000.0, R)
+    assert abs(y2) < 1e-6, y2
+    # a la derecha, detras
+    y3, _ = mod.surface_direction(me, C, (0.0, math.cos(0.5) * R, -math.sin(0.5) * R), right, at, False, 500, R)
+    assert abs(y3 - 90) < 1e-6, y3
+    y4, _ = mod.surface_direction(me, C, (-math.sin(0.5) * R, math.cos(0.5) * R, 0.0), right, at, False, 500, R)
+    assert abs(abs(y4) - 180) < 1e-6, y4
+    # volando a 300 m sobre el destino que esta a 300 m: 45 grados hacia abajo; lejos, casi plana
+    _, p5 = mod.surface_direction((0.0, R + 300, 0.0), C, far, right, at, False, 300.0, R)
+    assert abs(p5 + 45) < 1e-6, p5
+    _, p6 = mod.surface_direction((0.0, R + 300, 0.0), C, far, right, at, False, 200000.0, R)
+    assert -0.1 < p6 < 0, p6
+
+
 if __name__ == "__main__":
     fails = 0
     t0 = time.time()

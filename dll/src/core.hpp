@@ -23,7 +23,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.2.0-dev.6";  // v0.2 en desarrollo: panel, flecha, tamano y lista por planeta
+constexpr const char* kModVersion = "0.2.0-dev.7";  // v0.2 en desarrollo: tamanos como el .exe y flecha en el plano del suelo
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;

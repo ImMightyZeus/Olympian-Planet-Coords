@@ -258,19 +258,21 @@ int main() {
     CHECK(g_copies.size() == 1);
     const VkBufferImageCopy& c = g_copies[0];
     const uint32_t first_w = c.imageExtent.width, first_h = c.imageExtent.height;  // (c deja de valer luego)
-    // 1200 de alto: escala 1.111. El ancho se ajusta al texto (3 lineas: 99 de alto), a 27 px del borde
-    CHECK(c.imageExtent.width >= 230 && c.imageExtent.width <= 320 && c.imageExtent.height == 99 &&
-          c.imageExtent.depth == 1);
-    CHECK(c.imageOffset.x == 27 && c.imageOffset.y == 27);
-    CHECK(c.bufferRowLength == c.imageExtent.width && c.bufferImageHeight == 99);
+    const int32_t first_off = c.imageOffset.x;
+    // Tamano por el DPI de Windows (como el .exe), no por la resolucion. El ancho se ajusta al texto.
+    CHECK(c.imageExtent.width >= 120 && c.imageExtent.width <= 400 && c.imageExtent.height >= 40 &&
+          c.imageExtent.height <= 140 && c.imageExtent.depth == 1);
+    std::printf("recuadro a 1200 de alto: %ux%u\n", c.imageExtent.width, c.imageExtent.height);
+    CHECK(c.imageOffset.x == c.imageOffset.y && c.imageOffset.x >= 18 && c.imageOffset.x <= 60);
+    CHECK(c.bufferRowLength == c.imageExtent.width && c.bufferImageHeight == c.imageExtent.height);
     CHECK(g_begins == 1 && g_ends == 1);
     std::printf("copia: %ux%u en (%d,%d)\n", c.imageExtent.width, c.imageExtent.height, c.imageOffset.x, c.imageOffset.y);
 
     // Pixeles: barra de acento a la izquierda, borde, fondo y texto claro (R8G8B8A8: bytes R,G,B,A).
     const uint8_t* map = static_cast<const uint8_t*>(g_maps[0]);
     uint32_t w = c.imageExtent.width, h = c.imageExtent.height;  // 444 x 107 con el texto de la prueba
-    CHECK(Pixel(map, w, 1, 50) == 0xFF3DA3E8);    // acento (232,163,61)
-    CHECK(Pixel(map, w, w - 1, 50) == 0xFF48403A);  // borde (58,64,72)
+    CHECK(Pixel(map, w, 1, h / 2) == 0xFF3DA3E8);    // acento (232,163,61)
+    CHECK(Pixel(map, w, w - 1, h / 2) == 0xFF48403A);  // borde (58,64,72)
     CHECK(Pixel(map, w, w - 3, h - 3) == 0xFF1E1814);  // fondo (20,24,30)
     int bright = 0, accent_text = 0;
     for (uint32_t y = 0; y < h; ++y)
@@ -293,7 +295,7 @@ int main() {
             std::fclose(f);
         }
     }
-    CHECK(bright > 150 && accent_text > 80);
+    CHECK(bright > 80 && accent_text > 60);  // letra de 8 y 6 puntos (como el .exe) a 96 DPI
 
     // 2. La GPU no termina: tras 4 cuadros en vuelo, presenta sin tocar nada (no espera).
     for (int i = 0; i < 3; ++i) Present(q0, sc, (i + 2) % 3, game);
@@ -339,16 +341,14 @@ int main() {
     Present(q0, bgra, 1, game);
     CHECK(g_submits.size() == subs + 1);
     const VkBufferImageCopy& c2 = g_copies.back();
-    // 1440 de alto: escala 1.333 (x1.2 respecto a 1200)
+    // 1440 de alto: mismo tamano que a 1200 (depende del DPI, no de la resolucion)
     const uint32_t w1 = first_w, h1 = first_h, w2 = c2.imageExtent.width;
-    // el ancho sale de medir el texto: las letras no crecen exacto x1.2 (tamanos enteros), +-8%
-    CHECK(std::abs(static_cast<int>(w2) - static_cast<int>(std::lround(w1 * 1.2))) <= static_cast<int>(w1 * 0.08));
-    CHECK(std::abs(static_cast<int>(c2.imageExtent.height) - static_cast<int>(std::lround(h1 * 1.2))) <= 3);
-    std::printf("copia 1440: %ux%u (1200: %ux%u)\n", w2, c2.imageExtent.height, w1, h1);
-    CHECK(c2.imageOffset.x == 32);
+    std::printf("1440: %ux%u, 1200: %ux%u\n", w2, c2.imageExtent.height, w1, h1);
+    CHECK(c2.imageExtent.height == h1 && w2 > 60);  // otro texto (ancho distinto), mismo alto
+    CHECK(c2.imageOffset.x == first_off);
     bool found = false;
     for (void* m : g_maps)
-        if (Pixel(static_cast<uint8_t*>(m), w2, 1, 60) == 0xFFE8A33D) found = true;  // acento en BGRA
+        if (Pixel(static_cast<uint8_t*>(m), w2, 1, h1 / 2) == 0xFFE8A33D) found = true;  // acento en BGRA
     CHECK(found);
     // Cadena destruida: ya no se dibuja en ella.
     OverlayOnDestroySwapchain(bgra);
