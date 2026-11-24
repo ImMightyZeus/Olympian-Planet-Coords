@@ -141,7 +141,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.4" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.5" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -699,7 +699,7 @@ def test_dll_completo_bajo_wine_con_nms_falso(exe):
         # el NMS falso no trae las funciones de nombres (opcionales): el mod sigue igual sin ellas
         assert "Nombres del juego: sistema NO (rva=0x0), estacion NO (rva=0x0)" in log, log
         # teclado del panel: al menos los 4 de user32 (el NMS falso no carga xinput9_1_0)
-        assert re.search(r"Teclado del panel: [45] de 5 enganches", log), log
+        assert re.search(r"Teclado del panel: [56] de 6 enganches", log), log
         # sonda de Vulkan: engancha el cargador y ve pasar la instancia que crea el "juego"
         assert "[vk] gancho vkQueuePresentKHR: MH_OK" in log, log
         if "vkCreateInstance=no_loader" not in out:

@@ -119,8 +119,8 @@ int main() {
     LoadLibraryW(L"xinput9_1_0.dll");
     int n = InputHookInstall(&Log);
     std::printf("enganches: %d\n", n);
-    CHECK(n >= 4);
-    // Ventana "del juego" en primer plano
+    CHECK(n >= 5);
+    // Ventana "del juego" en primer plano, con su cola de mensajes en este hilo (como SDL en NMS)
     WNDCLASSW wc{};
     wc.lpfnWndProc = OrigProc;
     wc.hInstance = GetModuleHandleW(nullptr);
@@ -129,61 +129,88 @@ int main() {
     HWND hwnd = CreateWindowW(L"OlympianFakeGame", L"juego", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 0, 200, 100, nullptr,
                               nullptr, wc.hInstance, nullptr);
     SetForegroundWindow(hwnd);
+    // Saca un mensaje de la cola como lo hace el juego y devuelve lo que el juego recibe.
+    auto pump = [hwnd](UINT msg, WPARAM wp, LPARAM lp) {
+        PostMessageW(hwnd, msg, wp, lp);
+        MSG m{};
+        UINT seen = 0xFFFFFFFF;
+        while (PeekMessageW(&m, hwnd, 0, 0, PM_REMOVE)) {
+            if (m.message == msg || m.message == WM_NULL) seen = m.message;
+            DispatchMessageW(&m);
+        }
+        return seen;
+    };
+    auto lp_key = [](UINT scan, bool up) {
+        return static_cast<LPARAM>(1 | (scan << 16) | (up ? (3u << 30) : 0u));
+    };
     BYTE ks[256];
-    std::memset(ks, 0, sizeof(ks));
     // Sin captura: pasa tal cual
-    SendMessageW(hwnd, WM_KEYDOWN, 'W', 0);
-    CHECK(g_orig_calls == 1);
+    CHECK(pump(WM_KEYDOWN, 'W', lp_key(0x11, false)) == WM_KEYDOWN);
     CHECK(GetKeyboardState(ks) != 0);
-    InputSetCapture(true);
-    CHECK(InputCapturing());
-    CHECK(GetAsyncKeyState(VK_LBUTTON) == 0 && GetKeyState(VK_CAPITAL) == 0);
-    std::memset(ks, 0xAB, sizeof(ks));
-    CHECK(GetKeyboardState(ks) != 0);
-    bool zero = true;
-    for (BYTE b : ks) zero = zero && b == 0;
-    CHECK(zero);
-    if (GetForegroundWindow() == hwnd) {
-        SendMessageW(hwnd, WM_KEYDOWN, 'W', 0);
-        SendMessageW(hwnd, WM_CHAR, 'w', 0);
-        SendMessageW(hwnd, WM_LBUTTONDOWN, 0, 0);
-        CHECK(g_orig_calls == 1);  // no llegaron al juego
-        SendMessageW(hwnd, WM_KEYUP, 'W', 0);  // soltar si llega (no se cuenta, pero no se bloquea)
+    if (GetForegroundWindow() != hwnd) {
+        std::printf("(Wine no dejo la ventana en primer plano: se omiten las pruebas de la cola)\n");
     } else {
-        std::printf("(Wine no dejo la ventana en primer plano: se omite la prueba de mensajes)\n");
-    }
-    InputSetCapture(false);
-    if (GetForegroundWindow() == hwnd) {
-        // Esc presionado con el panel abierto y soltado ya cerrado: el juego no ve ni lo uno ni lo otro
-        g_keyups = 0;
+        SetCursorPos(50, 60);
         InputSetCapture(true);
-        SendMessageW(hwnd, WM_KEYDOWN, VK_ESCAPE, 0);
+        CHECK(InputCapturing());
+        // Teclas por la cola (WM_KEYDOWN, como SDL): el juego recibe WM_NULL y el panel la letra
+        CHECK(pump(WM_KEYDOWN, 'A', lp_key(0x1E, false)) == WM_NULL);
+        CHECK(pump(WM_CHAR, 'a', lp_key(0x1E, false)) == WM_NULL);
+        CHECK(pump(WM_KEYUP, 'A', lp_key(0x1E, true)) == WM_NULL);  // se presiono para el panel
+        CHECK(pump(WM_KEYDOWN, VK_ESCAPE, lp_key(0x01, false)) == WM_NULL);
+        CHECK(pump(WM_KEYDOWN, VK_SHIFT, lp_key(0x2A, false)) == WM_NULL);
+        CHECK(pump(WM_KEYDOWN, 'B', lp_key(0x30, false)) == WM_NULL);
+        CHECK(pump(WM_KEYUP, VK_SHIFT, lp_key(0x2A, true)) == WM_NULL);
+        CHECK(pump(WM_MOUSEMOVE, 0, MAKELPARAM(10, 10)) == WM_NULL);
+        CHECK(pump(WM_LBUTTONDOWN, MK_LBUTTON, 0) == WM_NULL);
+        CHECK(pump(WM_LBUTTONUP, 0, 0) == WM_LBUTTONUP);  // soltar si llega
+        CHECK(g_orig_calls == 1);  // ni WM_KEYDOWN ni WM_CHAR ni el clic llegaron a la ventana
+        std::vector<UiEvent> ev;
+        InputDrain(&ev);
+        CHECK(ev.size() == 3);
+        if (ev.size() == 3) {
+            CHECK(ev[0].key == UiKey::Char && ev[0].ch == U'a');
+            CHECK(ev[1].key == UiKey::Esc);
+            CHECK(ev[2].key == UiKey::Char && ev[2].ch == U'B');
+        }
+        // Estado del teclado y cursor: "nada presionado" y el cursor quieto
+        CHECK(GetAsyncKeyState(VK_LBUTTON) == 0 && GetKeyState(VK_CAPITAL) == 0);
+        std::memset(ks, 0xAB, sizeof(ks));
+        CHECK(GetKeyboardState(ks) != 0);
+        bool zero = true;
+        for (BYTE b : ks) zero = zero && b == 0;
+        CHECK(zero);
+        POINT before{}, after{};
+        GetCursorPos(&before);
+        SetCursorPos(300, 200);
+        GetCursorPos(&after);
+        CHECK(before.x == after.x && before.y == after.y);
+        // Esc presionado con el panel abierto y soltado ya cerrado: el juego no ve que se suelta
         InputSetCapture(false);
         CHECK(GetAsyncKeyState(VK_LBUTTON) == 0);  // sigue filtrando hasta soltar
-        SendMessageW(hwnd, WM_KEYUP, VK_ESCAPE, 0);
-        CHECK(g_keyups == 0);
-        SendMessageW(hwnd, WM_KEYUP, 'W', 0);  // tecla que no era del panel: le llega
-        CHECK(g_keyups == 1);
+        CHECK(pump(WM_KEYUP, VK_ESCAPE, lp_key(0x01, true)) == WM_NULL);
+        CHECK(pump(WM_KEYUP, 'B', lp_key(0x30, true)) == WM_NULL);
+        CHECK(pump(WM_KEYUP, 'W', lp_key(0x11, true)) == WM_KEYUP);  // la W no era del panel: le llega
+        CHECK(pump(WM_KEYDOWN, 'W', lp_key(0x11, false)) == WM_KEYDOWN);
+        GetCursorPos(&after);
+        CHECK(after.x == 300 && after.y == 200);  // sin captura: el cursor de verdad
         // Tecla del panel que nunca se suelta (Alt+Tab): a los 2 s se deja de filtrar
         InputSetCapture(true);
-        SendMessageW(hwnd, WM_KEYDOWN, 'Q', 0);
+        CHECK(pump(WM_KEYDOWN, 'Q', lp_key(0x10, false)) == WM_NULL);
         InputSetCapture(false);
         InputTick();
-        BYTE kb[256];
-        std::memset(kb, 0xAB, sizeof(kb));
-        GetKeyboardState(kb);
-        CHECK(kb[0] == 0);  // todavia filtra
+        std::memset(ks, 0xAB, sizeof(ks));
+        GetKeyboardState(ks);
+        CHECK(ks[0] == 0);  // todavia filtra
         Sleep(2100);
         InputTick();
-        std::memset(kb, 0xAB, sizeof(kb));
-        GetKeyboardState(kb);
-        CHECK(kb[0] != 0xAB);  // el original escribio el estado real
+        std::memset(ks, 0xAB, sizeof(ks));
+        GetKeyboardState(ks);
+        CHECK(ks[0] != 0xAB);  // ya devuelve el estado real
+        ev.clear();
+        InputDrain(&ev);
+        CHECK(ev.size() == 1);
     }
-    SendMessageW(hwnd, WM_KEYDOWN, 'W', 0);
-    CHECK(g_orig_calls == 2 || GetForegroundWindow() != hwnd);
-    std::vector<UiEvent> ev;
-    InputDrain(&ev);
-    CHECK(ev.empty());
     std::printf(g_fail ? "FALLOS: %d\n" : "OK teclado\n", g_fail);
     return g_fail ? 1 : 0;
 }

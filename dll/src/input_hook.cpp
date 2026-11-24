@@ -43,115 +43,220 @@ GetKeyStateFn o_keystate = nullptr;
 GetKeyboardStateFn o_kbstate = nullptr;
 XInputGetStateFn o_xinput = nullptr;
 
-HWND g_hwnd = nullptr;
-WNDPROC g_old_proc = nullptr;
-bool g_proc_unicode = true;
+using GetCursorPosFn = BOOL(WINAPI*)(LPPOINT);
+GetCursorPosFn o_cursor = nullptr;
+XInputGetStateFn o_xinput14 = nullptr, o_xinput14ex = nullptr, o_xinput13 = nullptr;
+POINT g_frozen_cursor{};
+std::atomic<bool> g_raw_kbd{false};  // en esta captura llegan teclas por Raw Input (no se usan WM_KEYDOWN)
+
+// Contadores de la captura actual (se anotan en el registro al cerrar el panel).
+struct Counters {
+    std::atomic<unsigned> wm_input_kbd{0}, wm_input_mouse{0}, wm_input_other{0}, keydown{0}, keyup{0}, chars{0},
+        mouse_msgs{0}, raw_calls{0}, async_calls{0}, keystate_calls{0}, kbstate_calls{0}, cursor_calls{0},
+        xinput_calls{0}, events{0};
+    void Reset() {
+        for (auto* c : {&wm_input_kbd, &wm_input_mouse, &wm_input_other, &keydown, &keyup, &chars, &mouse_msgs,
+                        &raw_calls, &async_calls, &keystate_calls, &kbstate_calls, &cursor_calls, &xinput_calls,
+                        &events})
+            c->store(0);
+    }
+} g_n;
+
+DWORD g_hook_thread = 0;
+HHOOK g_msg_hook = nullptr;
+
+void Push(const std::vector<UiEvent>& ev) {
+    if (ev.empty()) return;
+    std::lock_guard<std::mutex> g(g_mu);
+    g_events.insert(g_events.end(), ev.begin(), ev.end());
+    g_n.events += static_cast<unsigned>(ev.size());
+}
+
+// Una tecla (de Raw Input o de WM_KEYDOWN/WM_KEYUP) mientras se captura o quedan teclas del panel
+// presionadas. Devuelve true si el juego NO debe verla.
+bool KeyForPanel(const RAWKEYBOARD& k, bool translate, std::bitset<256>* held) {
+    const USHORT vk = k.VKey;
+    const bool up = (k.Flags & RI_KEY_BREAK) != 0;
+    if (up) {
+        if (g_capture.load() && translate) {
+            std::vector<UiEvent> ev;
+            TranslateKey(k, &g_keys, GetKeyboardLayout(0), &ev);  // lleva Shift, AltGr...
+        }
+        if (vk < 256 && (*held)[vk]) {  // se presiono para el panel: el juego tampoco ve que se suelta
+            std::lock_guard<std::mutex> g(g_mu);
+            held->reset(vk);
+            g_holding.store(g_raw_held.any() || g_wm_held.any());
+            return true;
+        }
+        return false;
+    }
+    if (!g_capture.load()) return false;
+    if (translate) {
+        std::vector<UiEvent> ev;
+        TranslateKey(k, &g_keys, GetKeyboardLayout(0), &ev);
+        Push(ev);
+    }
+    std::lock_guard<std::mutex> g(g_mu);
+    if (vk < 256) held->set(vk);
+    g_holding.store(true);
+    return true;
+}
 
 UINT WINAPI HookRaw(HRAWINPUT h, UINT cmd, LPVOID data, PUINT size, UINT header) {
     UINT r = o_raw(h, cmd, data, size, header);
-    if (!Filtering() || cmd != RID_INPUT || !data || r == static_cast<UINT>(-1) || r < sizeof(RAWINPUTHEADER))
-        return r;
-    RAWINPUT* ri = static_cast<RAWINPUT*>(data);
-    if (ri->header.dwType == RIM_TYPEKEYBOARD) {
-        RAWKEYBOARD& k = ri->data.keyboard;
-        const USHORT vk = k.VKey;
-        const bool up = (k.Flags & RI_KEY_BREAK) != 0;
-        if (up) {
-            if (g_capture.load()) {
-                std::vector<UiEvent> ev;
-                TranslateKey(k, &g_keys, GetKeyboardLayout(0), &ev);  // lleva Shift, AltGr... (antes de vaciarla)
-            }
-            if (vk < 256 && g_raw_held[vk]) {  // se presiono para el panel: el juego tampoco ve que se suelta
-                std::lock_guard<std::mutex> g(g_mu);
-                g_raw_held.reset(vk);
-                g_holding.store(g_raw_held.any() || g_wm_held.any());
-                k.VKey = 0xFF;
-                k.MakeCode = 0;
-                k.Message = WM_NULL;
-            }
-            return r;
-        }
-        if (!g_capture.load()) return r;
-        std::vector<UiEvent> ev;
-        TranslateKey(k, &g_keys, GetKeyboardLayout(0), &ev);
-        std::lock_guard<std::mutex> g(g_mu);
-        g_events.insert(g_events.end(), ev.begin(), ev.end());
-        if (vk < 256) g_raw_held.set(vk);
-        g_holding.store(true);
-        NeutralizeRaw(ri);
-        return r;
-    }
-    if (g_capture.load()) NeutralizeRaw(ri);
+    if (!g_capture.load()) return r;
+    ++g_n.raw_calls;
+    // Respaldo: si el juego lee Raw Input por otro camino, le llega vacio (las teclas para el panel se
+    // toman en FilterMessage, al llegar el mensaje WM_INPUT).
+    if (cmd == RID_INPUT && data && r != static_cast<UINT>(-1) && r >= sizeof(RAWINPUTHEADER))
+        NeutralizeRaw(static_cast<RAWINPUT*>(data));
     return r;
 }
 
-// Mientras el panel captura (o quedan teclas suyas presionadas): "nada presionado".
-SHORT WINAPI HookAsync(int vk) { return Filtering() ? 0 : o_async(vk); }
-SHORT WINAPI HookKeyState(int vk) { return Filtering() ? 0 : o_keystate(vk); }
-BOOL WINAPI HookKbState(PBYTE s) {
-    BOOL r = o_kbstate(s);
-    if (r && s && Filtering()) std::memset(s, 0, 256);
+// Filtro de los mensajes que el juego saca de su cola (WH_GETMESSAGE en el hilo de la ventana).
+void FilterMessage(MSG* m, bool removing) {
+    const UINT msg = m->message;
+    const bool cap = g_capture.load();
+    auto drop = [m] { m->message = WM_NULL; };
+    if (msg == WM_INPUT) {
+        if (!removing) {
+            if (cap) drop();
+            return;
+        }
+        alignas(8) unsigned char buf[sizeof(RAWINPUT) + 64];
+        UINT sz = sizeof(buf);
+        UINT got = o_raw(reinterpret_cast<HRAWINPUT>(m->lParam), RID_INPUT, buf, &sz, sizeof(RAWINPUTHEADER));
+        bool block = cap;
+        if (got != static_cast<UINT>(-1) && got >= sizeof(RAWINPUTHEADER)) {
+            RAWINPUT* ri = reinterpret_cast<RAWINPUT*>(buf);
+            if (ri->header.dwType == RIM_TYPEKEYBOARD) {
+                if (cap) {
+                    ++g_n.wm_input_kbd;
+                    g_raw_kbd.store(true);
+                }
+                block = KeyForPanel(ri->data.keyboard, true, &g_raw_held) || cap;
+            } else if (ri->header.dwType == RIM_TYPEMOUSE) {
+                if (cap) ++g_n.wm_input_mouse;
+            } else if (cap) {
+                ++g_n.wm_input_other;
+            }
+        }
+        if (block) {
+            DefWindowProcW(m->hwnd, WM_INPUT, m->wParam, m->lParam);  // libera el dato de Raw Input
+            drop();
+        }
+        return;
+    }
+    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP) {
+        const bool up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
+        if (!removing) {
+            if (cap || (up && m->wParam < 256 && g_wm_held[m->wParam])) drop();
+            return;
+        }
+        if (cap) ++(up ? g_n.keyup : g_n.keydown);
+        RAWKEYBOARD k{};
+        k.VKey = static_cast<USHORT>(m->wParam);
+        k.MakeCode = static_cast<USHORT>((m->lParam >> 16) & 0xFF);
+        k.Flags = static_cast<USHORT>((up ? RI_KEY_BREAK : RI_KEY_MAKE) | (((m->lParam >> 24) & 1) ? RI_KEY_E0 : 0));
+        // Si las teclas llegan por Raw Input, esas se usan para el panel (aqui solo se bloquea).
+        if (KeyForPanel(k, !g_raw_kbd.load(), &g_wm_held)) drop();
+        return;
+    }
+    if (!cap) return;
+    switch (msg) {
+        case WM_CHAR:
+        case WM_SYSCHAR:
+        case WM_DEADCHAR:
+        case WM_SYSDEADCHAR:
+        case WM_UNICHAR:
+            if (removing) ++g_n.chars;
+            drop();
+            return;
+        default:
+            break;
+    }
+    if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+        if (removing) ++g_n.mouse_msgs;
+        // Los botones que se sueltan si le llegan (nada queda presionado en el juego).
+        if (msg != WM_LBUTTONUP && msg != WM_RBUTTONUP && msg != WM_MBUTTONUP && msg != WM_XBUTTONUP) drop();
+    }
+}
+
+LRESULT CALLBACK GetMsgProc(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION && lp && Filtering()) FilterMessage(reinterpret_cast<MSG*>(lp), wp == PM_REMOVE);
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+// Engancha la cola de mensajes del hilo de la ventana del juego (la que tiene el foco).
+void HookWindowThread() {
+    HWND fg = GetForegroundWindow();
+    DWORD pid = 0;
+    DWORD tid = fg ? GetWindowThreadProcessId(fg, &pid) : 0;
+    if (!tid || pid != GetCurrentProcessId() || tid == g_hook_thread) return;
+    HHOOK h = SetWindowsHookExW(WH_GETMESSAGE, &GetMsgProc, nullptr, tid);
+    if (!h) {
+        if (g_log) g_log("[teclado] no se pudo enganchar la cola de mensajes (error %lu)", GetLastError());
+        return;
+    }
+    if (g_msg_hook) UnhookWindowsHookEx(g_msg_hook);
+    g_msg_hook = h;
+    g_hook_thread = tid;
+    if (g_log)
+        g_log("[teclado] cola de mensajes enganchada (hilo %lu%s)", tid,
+              tid == GetCurrentThreadId() ? ", el mismo del juego" : ", otro hilo");
+}
+
+BOOL WINAPI HookCursor(LPPOINT p) {
+    if (g_capture.load() && p) {  // el cursor "no se mueve" mientras el panel esta abierto
+        ++g_n.cursor_calls;
+        *p = g_frozen_cursor;
+        return TRUE;
+    }
+    return o_cursor(p);
+}
+
+DWORD WINAPI HookXInput14(DWORD user, XINPUT_STATE* st) {
+    DWORD r = o_xinput14(user, st);
+    if (r == ERROR_SUCCESS && st && g_capture.load()) std::memset(&st->Gamepad, 0, sizeof(st->Gamepad));
     return r;
 }
-DWORD WINAPI HookXInput(DWORD user, XINPUT_STATE* st) {
-    DWORD r = o_xinput(user, st);
+DWORD WINAPI HookXInput14Ex(DWORD user, XINPUT_STATE* st) {
+    DWORD r = o_xinput14ex(user, st);
+    if (r == ERROR_SUCCESS && st && g_capture.load()) std::memset(&st->Gamepad, 0, sizeof(st->Gamepad));
+    return r;
+}
+DWORD WINAPI HookXInput13(DWORD user, XINPUT_STATE* st) {
+    DWORD r = o_xinput13(user, st);
     if (r == ERROR_SUCCESS && st && g_capture.load()) std::memset(&st->Gamepad, 0, sizeof(st->Gamepad));
     return r;
 }
 
-// Mensajes de teclado y clics: mientras se captura, no llegan al juego.
-LRESULT CALLBACK HookProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if ((msg == WM_KEYUP || msg == WM_SYSKEYUP) && wp < 256 && g_wm_held[wp]) {
-        std::lock_guard<std::mutex> g(g_mu);
-        g_wm_held.reset(wp);
-        g_holding.store(g_raw_held.any() || g_wm_held.any());
-        return 0;
-    }
-    if (g_capture.load() && (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && wp < 256) {
-        std::lock_guard<std::mutex> g(g_mu);
-        g_wm_held.set(wp);
-        g_holding.store(true);
-        return 0;
-    }
-    if (g_capture.load()) {
-        switch (msg) {
-            case WM_KEYDOWN:
-            case WM_SYSKEYDOWN:
-            case WM_CHAR:
-            case WM_SYSCHAR:
-            case WM_DEADCHAR:
-            case WM_SYSDEADCHAR:
-            case WM_UNICHAR:
-            case WM_LBUTTONDOWN:
-            case WM_RBUTTONDOWN:
-            case WM_MBUTTONDOWN:
-            case WM_XBUTTONDOWN:
-            case WM_LBUTTONDBLCLK:
-            case WM_RBUTTONDBLCLK:
-            case WM_MBUTTONDBLCLK:
-            case WM_MOUSEWHEEL:
-            case WM_MOUSEHWHEEL:
-                return 0;
-            default:
-                break;
-        }
-    }
-    return g_proc_unicode ? CallWindowProcW(g_old_proc, hwnd, msg, wp, lp)
-                          : CallWindowProcA(g_old_proc, hwnd, msg, wp, lp);
+// Mientras el panel captura (o quedan teclas suyas presionadas): "nada presionado".
+SHORT WINAPI HookAsync(int vk) {
+    if (!Filtering()) return o_async(vk);
+    ++g_n.async_calls;
+    return 0;
 }
-
-void HookWindow() {
-    HWND fg = GetForegroundWindow();
-    DWORD pid = 0;
-    if (!fg || (GetWindowThreadProcessId(fg, &pid), pid != GetCurrentProcessId()) || fg == g_hwnd) return;
-    g_proc_unicode = IsWindowUnicode(fg) != FALSE;  // la ventana sigue siendo ANSI o Unicode, como era
-    LONG_PTR mine = reinterpret_cast<LONG_PTR>(&HookProc);
-    LONG_PTR old = g_proc_unicode ? SetWindowLongPtrW(fg, GWLP_WNDPROC, mine) : SetWindowLongPtrA(fg, GWLP_WNDPROC, mine);
-    if (old) {
-        g_hwnd = fg;
-        g_old_proc = reinterpret_cast<WNDPROC>(old);
-        if (g_log) g_log("[teclado] ventana del juego enganchada (%s)", g_proc_unicode ? "Unicode" : "ANSI");
+SHORT WINAPI HookKeyState(int vk) {
+    if (!Filtering()) return o_keystate(vk);
+    ++g_n.keystate_calls;
+    return 0;
+}
+BOOL WINAPI HookKbState(PBYTE s) {
+    BOOL r = o_kbstate(s);
+    if (r && s && Filtering()) {
+        ++g_n.kbstate_calls;
+        std::memset(s, 0, 256);
     }
+    return r;
+}
+DWORD WINAPI HookXInput(DWORD user, XINPUT_STATE* st) {
+    DWORD r = o_xinput(user, st);
+    if (r == ERROR_SUCCESS && st && g_capture.load()) {
+        ++g_n.xinput_calls;
+        std::memset(&st->Gamepad, 0, sizeof(st->Gamepad));
+    }
+    return r;
 }
 
 template <typename T>
@@ -285,6 +390,26 @@ bool NeutralizeRaw(RAWINPUT* ri) {
     return false;
 }
 
+// El mando: SDL carga xinput1_4 (o 1_3) por su cuenta y usa tambien XInputGetStateEx (ordinal 100).
+void HookXInputLate() {
+    static bool done14 = false, done13 = false;
+    if (!done14 && GetModuleHandleW(L"xinput1_4")) {
+        done14 = true;
+        Hook(L"xinput1_4", "XInputGetState", reinterpret_cast<void*>(&HookXInput14), &o_xinput14);
+        HMODULE m = GetModuleHandleW(L"xinput1_4");
+        if (void* ex = reinterpret_cast<void*>(GetProcAddress(m, reinterpret_cast<LPCSTR>(100)))) {
+            MH_STATUS st = MH_CreateHook(ex, reinterpret_cast<void*>(&HookXInput14Ex),
+                                         reinterpret_cast<void**>(&o_xinput14ex));
+            if (st == MH_OK) st = MH_EnableHook(ex);
+            if (g_log) g_log("[teclado] XInputGetStateEx (1_4): %s", MH_StatusToString(st));
+        }
+    }
+    if (!done13 && GetModuleHandleW(L"xinput1_3")) {
+        done13 = true;
+        Hook(L"xinput1_3", "XInputGetState", reinterpret_cast<void*>(&HookXInput13), &o_xinput13);
+    }
+}
+
 int InputHookInstall(InputLogFn log) {
     g_log = log;
     int ok = 0;
@@ -292,17 +417,23 @@ int InputHookInstall(InputLogFn log) {
     ok += Hook(L"user32", "GetAsyncKeyState", reinterpret_cast<void*>(&HookAsync), &o_async);
     ok += Hook(L"user32", "GetKeyState", reinterpret_cast<void*>(&HookKeyState), &o_keystate);
     ok += Hook(L"user32", "GetKeyboardState", reinterpret_cast<void*>(&HookKbState), &o_kbstate);
+    ok += Hook(L"user32", "GetCursorPos", reinterpret_cast<void*>(&HookCursor), &o_cursor);
     if (GetModuleHandleW(L"xinput9_1_0"))
         ok += Hook(L"xinput9_1_0", "XInputGetState", reinterpret_cast<void*>(&HookXInput), &o_xinput);
     else if (g_log)
-        g_log("[teclado] xinput9_1_0 no esta cargado: el mando no se bloquea");
+        g_log("[teclado] xinput9_1_0 no esta cargado");
+    HookXInputLate();
     return ok;
 }
 
 void InputSetCapture(bool on) {
     if (on == g_capture.load()) return;
     if (on) {
-        HookWindow();
+        HookWindowThread();
+        HookXInputLate();
+        g_n.Reset();
+        g_raw_kbd.store(false);
+        if (o_cursor) o_cursor(&g_frozen_cursor);
         {
             std::lock_guard<std::mutex> g(g_mu);
             g_events.clear();
@@ -315,6 +446,14 @@ void InputSetCapture(bool on) {
     if (!on) g_released_at = GetTickCount64();
     g_capture.store(on);
     if (g_log) g_log("[teclado] captura %s", on ? "activada (panel abierto)" : "desactivada");
+    if (!on && g_log)  // que llego mientras el panel estuvo abierto (para saber por donde lee el juego)
+        g_log("[teclado] durante el panel: WM_INPUT teclado=%u raton=%u otro=%u, WM_KEYDOWN=%u WM_KEYUP=%u "
+              "WM_CHAR=%u raton(msg)=%u, GetRawInputData=%u GetAsyncKeyState=%u GetKeyState=%u "
+              "GetKeyboardState=%u GetCursorPos=%u XInput=%u, teclas para el panel=%u",
+              g_n.wm_input_kbd.load(), g_n.wm_input_mouse.load(), g_n.wm_input_other.load(), g_n.keydown.load(),
+              g_n.keyup.load(), g_n.chars.load(), g_n.mouse_msgs.load(), g_n.raw_calls.load(),
+              g_n.async_calls.load(), g_n.keystate_calls.load(), g_n.kbstate_calls.load(), g_n.cursor_calls.load(),
+              g_n.xinput_calls.load(), g_n.events.load());
 }
 
 bool InputCapturing() { return g_capture.load(); }

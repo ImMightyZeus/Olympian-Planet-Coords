@@ -58,7 +58,7 @@
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.4"
+#define OLYMPIAN_VERSION "0.2.0-dev.5"
 constexpr int kHttpPort = 5000;
 
 extern "C" {
@@ -638,7 +638,7 @@ DWORD WINAPI Worker(LPVOID) {
     // Teclado del panel dentro del juego (si falla, el panel no se abre y F9 sigue con el recuadro .exe).
     if (mh == MH_OK) {
         g_input_hooks = olympian::InputHookInstall(&Log);
-        Log("Teclado del panel: %d de 5 enganches", g_input_hooks);
+        Log("Teclado del panel: %d de 6 enganches", g_input_hooks);
     }
     // Marcador del HUD: si este hook fallara, las coordenadas siguen funcionando igual.
     void* bbm_target = reinterpret_cast<void*>(
