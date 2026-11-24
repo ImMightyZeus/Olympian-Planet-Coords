@@ -316,7 +316,16 @@ int DrawLine(HDC dc, const Line& l, double s, int x0, int y, int right, int clip
     HGDIOBJ of = SelectObject(dc, ft);
     TEXTMETRICW tm{};
     GetTextMetricsW(dc, &tm);
-    const int baseline = y + tm.tmAscent;
+    int ascent = tm.tmAscent;
+    if (fn) {  // DSEG7 sube mas que Share Tech Mono (ascenso 1.0 contra 0.885): la linea base baja para que
+               // no se corte la parte de arriba de los digitos (el 0 se veia como una U)
+        SelectObject(dc, fn);
+        TEXTMETRICW tn{};
+        GetTextMetricsW(dc, &tn);
+        ascent = std::max<int>(ascent, tn.tmAscent);
+        SelectObject(dc, ft);
+    }
+    const int baseline = y + ascent;
     SetTextAlign(dc, TA_LEFT | TA_BASELINE | TA_NOUPDATECP);
     int x = x0;
     if (tab != std::wstring::npos) {
@@ -356,7 +365,7 @@ int DrawLine(HDC dc, const Line& l, double s, int x0, int y, int right, int clip
         SIZE sz{};
         GetTextExtentPoint32W(dc, line.c_str() + k, static_cast<int>(e - k), &sz);
         if (draw) {
-            RECT clip{x, y, right, clip_bottom};
+            RECT clip{x, 0, right, clip_bottom};  // solo se corta a la derecha y abajo
             ExtTextOutW(dc, x, baseline, ETO_CLIPPED, &clip, line.c_str() + k, static_cast<UINT>(e - k), nullptr);
         }
         x += sz.cx;

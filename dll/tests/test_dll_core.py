@@ -141,7 +141,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.7" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.8" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
