@@ -13,22 +13,23 @@ Type a latitude and longitude, get a HUD marker and a 3D arrow that guides you t
 
 <p align="center"><sub>Real overlay and real mod logic; the landscape and the HUD marker are illustrations.</sub></p>
 
-## What it does (v0.1.0-beta)
+## What it does (v0.2.0-beta)
 
-- **Live coordinates** in the top-left corner: on foot, in a ship, in a vehicle and in orbit.
-- **Destinations:** click the box (or press **F9** in game), type `lat, lon [name]`, press **Enter**, and a marker appears on the game's HUD.
-- **Distance and bearing** to the destination, plus a smooth-edged **3D arrow** that turns and tilts towards it.
+- **Live coordinates** in a box drawn inside the game, top-left: on foot, in a ship, in a vehicle and in orbit.
+- **Destinations:** press **F9** in game to open the panel, type `lat, lon [name]`, press **Enter**, and a marker appears on the game's HUD. While the panel is open the game gets no keyboard, mouse or gamepad input.
+- **Destination coordinates, distance and bearing**, plus a smooth-edged **3D arrow** pointing at it.
 - **Arrival:** at 50 m or less the destination clears itself and the arrow turns into a sphere.
-- **One destination per planet**, remembered even if you leave; history of the last 10.
+- **One destination per planet**, remembered even if you leave; up to 10 **saved destinations per planet** (↑ ↓ to pick, Enter to go, Del to remove).
+- **Away from planets:** the station's name, or the system, with the galaxy below.
 - **Normal / Large** size, a configurable hotkey, and the interface in **English, Spanish or Russian**.
 
 ## Status
 
-**v0.1.0-beta** is the first version for players: a `winmm.dll` you copy into the game's `Binaries` folder plus an overlay program (`OlympianPlanetCoords-Overlay.exe`). No Python or NMS.py needed. It works with No Man's Sky build **185034**; with any other build the DLL disables itself and the game runs normally. Download it from the [Releases](https://github.com/ImMightyZeus/Olympian-Planet-Coords/releases) page.
+**v0.2.0-beta**: a `winmm.dll` you copy into the game's `Binaries` folder. Everything is shown and controlled inside the game; the overlay program (`OlympianPlanetCoords-Overlay.exe`) is still included but optional. No Python or NMS.py needed. It works with No Man's Sky build **186923**; with any other build the DLL disables itself and the game runs normally. Download it from the [Releases](https://github.com/ImMightyZeus/Olympian-Planet-Coords/releases) page.
 
 Installation and usage: [INSTRUCTIONS.md](INSTRUCTIONS.md).
 
-The Python **lab version** (`mod/`, runs on [NMS.py](https://github.com/monkeyman192/NMS.py)) is still used to test changes in the real game before they reach the DLL: [mod/INSTRUCTIONS_NMSPY.md](mod/INSTRUCTIONS_NMSPY.md).
+The Python **lab version** (`mod/`, runs on [NMS.py](https://github.com/monkeyman192/NMS.py)) stays on build 185034: [mod/INSTRUCTIONS_NMSPY.md](mod/INSTRUCTIONS_NMSPY.md).
 
 ## What Olympian Planet Coords does and doesn't do
 
@@ -40,7 +41,7 @@ Every mod or editor changes the game, and Olympian Planet Coords is no exception
 4. **It will put your safety first:** backups before any change to your save, as little intrusion as possible, and clear warnings when something carries risk.
 5. **It will be transparent:** open source, not affiliated with Hello Games, and it will explain what each feature does and doesn't do.
 
-In this mod: it only reads the player's position and places a HUD marker like the ones the game already uses. It does not modify your save, your inventory or anything stored in the save file.
+In this mod: it only reads the player's position and the system and station names, places a HUD marker like the ones the game already uses and draws its box over the game's image. It does not modify your save, your inventory or anything stored in the save file.
 
 ## Disclaimer
 
@@ -55,12 +56,12 @@ The underlying commitment doesn't change: building real solutions and tools from
 
 [GNU General Public License v3.0](LICENSE). Third-party components:
 
-- NMS.py / pyMHF — monkeyman192, MIT (the DLL's structure offsets come from NMS.py's `dll/tools/nmspy_data_185034.json`; since 0.2.0-dev.2 the function patterns are our own, `dll/tools/sigs_185034.json`; see `dll/tools/NMS.py-LICENSE.txt`).
+- NMS.py / pyMHF — monkeyman192, MIT (the DLL's structure offsets come from NMS.py 186923.0 via `dll/tools/gen_offsets.py`; the function patterns are our own, `dll/tools/sigs_186923.json`; see `dll/tools/NMS.py-LICENSE.txt`).
 - MinHook — Tsuda Kageyu, BSD-2-Clause (`dll/third_party/MinHook-LICENSE.txt`).
 - JSON for Modern C++ (nlohmann/json) — Niels Lohmann, MIT (`dll/third_party/nlohmann/LICENSE.MIT`).
 - Pillow — MIT-CMU (bundled in the overlay `.exe`; installed separately for the lab version).
 - Python (PSF) and the PyInstaller bootloader (GPL with exception), bundled in the overlay `.exe`.
-- DSEG7 Classic and Share Tech Mono fonts — SIL Open Font License 1.1 (`overlay/fonts/`).
+- DSEG7 Classic and Share Tech Mono fonts — SIL Open Font License 1.1 (`overlay/fonts/`, also embedded in the DLL).
 
 ## Credits
 

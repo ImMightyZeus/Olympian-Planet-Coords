@@ -23,7 +23,7 @@ namespace olympian {
 
 using Json = nlohmann::ordered_json;
 
-constexpr const char* kModVersion = "0.2.0-dev.9";  // v0.2 en desarrollo: NMS.exe 186923
+constexpr const char* kModVersion = "0.2.0-beta";  // NMS.exe 186923
 constexpr double kArrivalMeters = 50.0;
 constexpr double kOrbitFactor = 3.0;
 constexpr double kStableSeconds = 1.0;

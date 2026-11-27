@@ -1,5 +1,5 @@
 """
-Olympian Planet Coords v0.1.0-beta - overlay de esquina superior izquierda
+Olympian Planet Coords v0.2.0-beta - overlay de esquina superior izquierda
 
 Olympian Planet Coords — Copyright © 2026 MightyZeus · Licencia GPL-3.0
 Apoya el proyecto: https://paypal.me/ImMightyZeus · Repositorio: https://github.com/ImMightyZeus/Olympian-Planet-Coords
@@ -49,7 +49,7 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
-VERSION = "0.1.0-beta"
+VERSION = "0.2.0-beta"
 MOD_NAME = "OlympianPlanetCoords"
 CREDITS = {
     "author": "MightyZeus, originario de Nicaragua",

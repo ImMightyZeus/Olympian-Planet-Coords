@@ -1,14 +1,30 @@
 # Changelog / Registro de cambios
 
-## Sin publicar / Unreleased
+## v0.2.0-beta — 2026-11-27
 
 **Español**
+- **Todo dentro del juego:** el recuadro y un panel se dibujan dentro del juego (letras DSEG7 y Share Tech Mono, con los tamaños del recuadro `.exe` según la escala de Windows). Ya no hacen falta el modo sin bordes ni el `.exe`, que sigue incluido como opcional.
+- **Panel con el teclado (F9):** escribir destinos, lista de destinos guardados de este planeta (↑ ↓, Enter = ir, Supr = quitar), ajustes (idioma, tecla, tamaño Normal / Grande, quitar el destino). Mientras está abierto, el juego no recibe teclado, ratón ni mando.
+- **Recuadro dentro del juego:** fila AHORA, fila DESTINO con el nombre, distancia y rumbo, y la flecha 3D a la derecha.
+- **Lista por planeta:** cada destino guardado recuerda su planeta (hasta 10 por planeta).
+- **Fuera de los planetas:** en una estación, su nombre con sistema y galaxia debajo; volando en el espacio, el sistema con la galaxia debajo.
+- **Flecha corregida:** con destinos lejanos apuntaba hacia el jugador (usaba la línea recta, que pasa por dentro del planeta). Ahora mide el giro sobre el suelo y la inclinación como si el suelo fuera plano. También en el recuadro `.exe`.
+- **Para la actualización del juego NMS.exe 186923** (la v0.1.0-beta se desactiva sola con ella).
+- Lo de las versiones de desarrollo (dev.3 a dev.9) está detallado en "Desarrollo del DLL".
 - Ruta nueva `PUT /forget?lat=&lon=` (en el DLL y en la versión Python), base para la lista de destinos: quita un punto de la lista y, si es el destino del planeta actual, también el destino y su marcador.
 - Versión Python (laboratorio): con la partida ya cargada al inyectar NMS.py, el mod ya no toma un puntero equivocado; lee `cGcApplication::Data` del mismo global que usa el juego en `cGcApplication::Update` (NMS 185034) y lo comprueba antes de usarlo.
 - Instrucciones: nota para laptops (si F9 abre otra cosa, usar Fn + F9, el bloqueo de Fn u otra tecla).
 - **Idioma ruso** en el recuadro, el DLL (mensajes, puntos cardinales С/СВ/В…, recuadro dentro del juego) y la versión Python. Se elige en el menú "Idioma / Language / Язык"; con Windows en ruso es el idioma por defecto. En ruso el recuadro usa Consolas (Share Tech Mono no trae cirílico). Los agradecimientos, la postura sobre los mods y la divulgación de IA se muestran en inglés hasta tener su versión rusa aprobada. La ventana de NMS.py sigue en inglés en ruso (no trae letras cirílicas).
 
 **English**
+- **Everything inside the game:** the box and a panel are drawn inside the game (DSEG7 and Share Tech Mono fonts, with the `.exe` box sizes based on Windows scaling). Borderless mode and the `.exe` are no longer needed; the `.exe` is still included as optional.
+- **Keyboard panel (F9):** type destinations, this planet's saved destinations (↑ ↓, Enter = go, Del = remove), settings (language, key, Normal / Large size, clear the destination). While it's open, the game gets no keyboard, mouse or gamepad input.
+- **In-game box:** NOW row, DEST row with the name, distance and bearing, and the 3D arrow on the right.
+- **Per-planet list:** each saved destination remembers its planet (up to 10 per planet).
+- **Away from planets:** in a station, its name with the system and galaxy below; flying in space, the system with the galaxy below.
+- **Arrow fixed:** with far destinations it pointed at the player (it used the straight line, which goes through the planet). Now it measures the turn on the ground and the tilt as if the ground were flat. Also in the `.exe` box.
+- **For the game update NMS.exe 186923** (v0.1.0-beta switches itself off with it).
+- The development builds (dev.3 to dev.9) are detailed under "DLL development".
 - New `PUT /forget?lat=&lon=` route (DLL and Python version), groundwork for the destinations list: removes a point from the list and, if it is the current planet's destination, also the destination and its marker.
 - Python (lab) version: when NMS.py is injected with a save already loaded, the mod no longer picks a wrong pointer; it reads `cGcApplication::Data` from the same global the game uses in `cGcApplication::Update` (NMS 185034) and checks it before use.
 - Instructions: laptop note (if F9 opens something else, use Fn + F9, the Fn lock or another key).
