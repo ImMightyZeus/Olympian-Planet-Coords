@@ -1,0 +1,19 @@
+{
+  "build": "186923",
+  "source": "Patrones propios de Olympian Planet Coords, sacados del NMS.exe 186923 con analisis estatico (no de NMS.py). Cada uno aparece una sola vez en .text.",
+  "functions": [
+    {"name": "cGcApplication::Update", "rva": "0x2dd4f0", "signature": "40 53 48 83 EC 20 E8 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ??"},
+    {"name": "cGcPlayerHUD::Update", "rva": "0x9972f0", "signature": "F3 0F 11 4C 24 10 55 41 55 48 8D AC 24 88 F9 FF FF"},
+    {"name": "cGcPlayerEnvironment::IsOnPlanet", "rva": "0x2c7980", "signature": "8B 81 74 04 00 00 83 F8 03 74 ?? 83 C0 FC 83 F8 04"},
+    {"name": "cGcMarkerPoint::cGcMarkerPoint", "rva": "0x12efcb0", "signature": "40 53 48 83 EC 20 66 0F 6F 05 ?? ?? ?? ?? 33 C0 0F 11 01 48 8B D9 0F 11 41 10"},
+    {"name": "cGcMarkerList::TryAddMarker", "rva": "0x12f4560", "signature": "40 57 41 54 41 56 48 83 EC 30 0F 29 74 24 20 45 0F B6 E0"},
+    {"name": "cGcMarkerList::RemoveMarker", "rva": "0x12f4310", "signature": "48 89 5C 24 18 55 57 41 56 48 83 EC 30 40 32 ED"},
+    {"name": "cGcBaseBuildingManager::Update", "rva": "0x3ba0c0", "signature": "48 8B C4 F3 0F 11 48 10 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 58 FE FF FF"},
+    {"name": "cGcBaseBuildingManager::AddHUDMarker", "rva": "0x3c9ad0", "signature": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC E0 02 00 00"},
+    {"name": "cTkFSM::StateChange", "rva": "0x2c57670", "signature": "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 4C 8B 51 08 49 8B E8 4C 8B 1D ?? ?? ?? ?? 48 8B F9 48 8B 35 ?? ?? ?? ??"}
+  ],
+  "optional": [
+    {"name": "cGcSolarSystem::GetDisplayName", "rva": "0x167a320", "signature": "48 89 5C 24 08 57 48 81 EC A0 00 00 00 48 8B FA 48 8B D9 E8 ?? ?? ?? ?? 48 8B C8 48 8B D7 E8 ?? ?? ?? ?? 84 C0 75", "note": "Nombre propio (no oficial): nombre visible del sistema actual (el subido por un jugador si lo hay). rcx = cGcSimulation.mpSolarSystem, rdx = texto de salida (0x80)."},
+    {"name": "cGcNameGenerator::GenerateSpaceStationName", "rva": "0xea5340", "signature": "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 55 48 8D AC 24 10 FC FF FF 48 81 EC F0 04 00 00 33 DB 48 89 54 24 20", "note": "rdx = direccion universal del sistema (planeta 0), r8 = texto de salida (0x80); no usa rcx. Se ve en cGcPlayerState::ClearIsOnOtherSideOfPortal."}
+  ]
+}

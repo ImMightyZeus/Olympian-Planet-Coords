@@ -1,4 +1,4 @@
-// "NMS.exe" falso para probar el DLL completo bajo Wine: version 185034, los patrones de las
+// "NMS.exe" falso para probar el DLL completo bajo Wine: version 186923, los patrones de las
 // funciones del juego en .text y un cGcApplication armado en memoria con los desplazamientos reales.
 // Fake "NMS.exe" to test the whole DLL under Wine.
 // Olympian Planet Coords — Copyright © 2026 MightyZeus · GPL-3.0 License

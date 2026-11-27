@@ -6,7 +6,7 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "FileVersion", "185034"
+      VALUE "FileVersion", "186923"
       VALUE "ProductName", "Fake NMS for Olympian tests"
     END
   END

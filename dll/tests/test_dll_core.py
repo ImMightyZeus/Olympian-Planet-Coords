@@ -141,7 +141,7 @@ def test_coords_igual_que_python(exe):
     h = Harness([exe, "core", path])
     s = h.ask({"none": True, "t": 0})
     assert s["on_planet"] is False and s["reason"] == "esperando al juego" and s["lat"] is None, s
-    assert s["version"] == "0.2.0-dev.8" and s["lang"] == "es" and s["hotkey"] == "f9", s
+    assert s["version"] == "0.2.0-dev.9" and s["lang"] == "es" and s["hotkey"] == "f9", s
     assert s["hotkey_saved"] == "f9" and s["input_request_id"] == 0, s
     assert s["history"] == [] and s["last_result"] == {"ok": None, "message": "", "seq": 0}
     for lat, lon in ((12.3456, -45.6789), (-80.1, 179.9), (0.0, 0.0), (45.0, -179.99), (89.0, 10.0)):
@@ -747,7 +747,7 @@ def test_windows_wine_fakegame(exe):
 
 @test
 def test_dll_completo_bajo_wine_con_nms_falso(exe):
-    """El winmm.dll real cargado por un NMS.exe falso (version 185034, las 9 funciones en .text, un
+    """El winmm.dll real cargado por un NMS.exe falso (version 186923, las 9 funciones en .text, un
     cTkFSM señuelo y la aplicacion verdadera; Update recibe basura en rcx, como en el juego real)."""
     if not (shutil.which("wine") and shutil.which("x86_64-w64-mingw32-g++")):
         print("   (sin wine/mingw: se omite)")

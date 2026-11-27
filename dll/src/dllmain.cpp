@@ -59,7 +59,7 @@
 #include "vk_probe.hpp"
 #include "winmm_exports.h"
 
-#define OLYMPIAN_VERSION "0.2.0-dev.8"
+#define OLYMPIAN_VERSION "0.2.0-dev.9"
 constexpr int kHttpPort = 5000;
 
 extern "C" {

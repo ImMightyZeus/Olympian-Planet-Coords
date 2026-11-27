@@ -1,11 +1,11 @@
-// Generado por tools/gen_offsets.py desde nmspy 185034.0 (MIT). No editar a mano.
+// Generado por tools/gen_offsets.py desde nmspy 186923.0 (MIT). No editar a mano.
 // Desplazamientos (bytes) de las estructuras del juego que lee Olympian Planet Coords.
 #pragma once
 
 namespace nmsoff {
 constexpr unsigned long long APP_MPDATA = 0x38;  // 56
-constexpr unsigned long long DATA_SIMULATION = 0x4cd580;  // 5035392
-constexpr unsigned long long DATA_GAMESTATE = 0xe70;  // 3696
+constexpr unsigned long long DATA_SIMULATION = 0x4cd620;  // 5035552
+constexpr unsigned long long DATA_GAMESTATE = 0xeb0;  // 3760
 constexpr unsigned long long SIM_ENVIRONMENT = 0xac930;  // 706864
 constexpr unsigned long long SIM_PLAYER = 0x25f860;  // 2488416
 constexpr unsigned long long SIM_SOLAR_SYSTEM = 0x25e090;  // 2482320

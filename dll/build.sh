@@ -2,7 +2,7 @@
 # Compila build/winmm.dll (Windows x64) con mingw-w64. Uso: ./build.sh [build_de_nms]
 set -e
 cd "$(dirname "$0")"
-NMS_BUILD="${1:-185034}"
+NMS_BUILD="${1:-186923}"
 python3 tools/gen_headers.py --build "$NMS_BUILD"
 CC=x86_64-w64-mingw32-gcc
 CXX=x86_64-w64-mingw32-g++

@@ -1,9 +1,9 @@
 """Genera sigs.S: funciones falsas cGcApplication::Update, cTkFSM::StateChange,
 cGcBaseBuildingManager::Update y AddHUDMarker (con el mismo prologo del juego) y los
-demas patrones (tools/sigs_185034.json) como bytes en .text, para probar el DLL completo bajo Wine sin el juego."""
+demas patrones (tools/sigs_186923.json) como bytes en .text, para probar el DLL completo bajo Wine sin el juego."""
 import json, os, sys
 here = os.path.dirname(os.path.abspath(__file__))
-data = json.load(open(os.path.join(here, "..", "..", "tools", "sigs_185034.json"), encoding="utf-8"))
+data = json.load(open(os.path.join(here, "..", "..", "tools", "sigs_186923.json"), encoding="utf-8"))
 sys.path.insert(0, os.path.join(here, "..", "..", "tools"))
 from gen_headers import FUNCTIONS
 by = {f["name"]: f["signature"].split() for f in data["functions"]}

@@ -9,7 +9,7 @@
 Tras un parche del juego: generar tools/sigs_<build>.json con los patrones del NMS.exe nuevo (cada uno
 debe aparecer una sola vez en .text), volver a ejecutar este script con --build <build> y recompilar.
 
-Uso: python tools/gen_headers.py --build 185034
+Uso: python tools/gen_headers.py --build 186923
 """
 
 import argparse
